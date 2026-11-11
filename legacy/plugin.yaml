@@ -1,0 +1,23 @@
+name: mailbridge
+version: 0.2.1
+description: Connect Gmail with local browser OAuth and migrate legacy POP and EML migration to Gmail with resumable capture, frozen inventories and destination verification.
+author: Madan
+provides_tools:
+  - mailbridge_gmail_connect
+  - mailbridge_gmail_connection_status
+  - mailbridge_providers
+  - mailbridge_inspect
+  - mailbridge_capture
+  - mailbridge_plan
+  - mailbridge_start
+  - mailbridge_status
+  - mailbridge_pause
+  - mailbridge_reconcile
+  - mailbridge_verify
+  - mailbridge_report
+provides_hooks: []
+python_dependencies:
+  - google-api-python-client>=2.200.0,<3
+  - google-auth>=2.58.0,<3
+  - google-auth-httplib2>=0.4.2,<1
+  - google-auth-oauthlib>=1.4.1,<2

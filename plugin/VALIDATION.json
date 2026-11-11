@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-11",
+  "version": "0.3.0",
+  "scope": "Catalog package only; fictional messages and isolated Hermes runtime; no live Google grant or Gmail import.",
+  "hermes_compatibility": {
+    "requires": ">=0.23.1",
+    "registry_checkout": "78abaafcccec20a546c94e8734a70e38c08a6a69",
+    "official_cli_validation": "Hermes 0.23.1, plugins validate --install-deps: passed"
+  },
+  "checks": {
+    "catalog_tests": {
+      "passed": 57,
+      "failed": 0
+    },
+    "legacy_tests_separate_distribution": {
+      "passed": 97,
+      "failed": 0
+    },
+    "admission": {
+      "passed": 15,
+      "failed": 0,
+      "warnings": []
+    },
+    "real_hermes_registry": "12 tools; catalog, account setup, synthetic prepare/start/status/verify/report passed",
+    "real_hermes_oauth_boundary": "installed worker reached credentialed_provider_request; missing grant returns human sign-in command without Google access",
+    "transport": "actual migration engine through JSON adapter, mocked Gmail service: lost acknowledgement with delayed search visibility; resumed without duplicate uploads; zero-import rerun",
+    "profile_isolation": "scoped POP secret beats another profile global value; unrelated secrets excluded; owning HERMES_HOME passed explicitly",
+    "account_binding": "exact identity verified before writes; every migration URL targets the frozen destination, not users/me",
+    "tls_pop": "real loopback TLS capture resumed 2,1,0 downloads; no DELE; local hashes verified",
+    "synthetic_demo": {
+      "source_rows": 14,
+      "unique_messages": 12,
+      "covered_rows": 14
+    },
+    "credential_files": "catalog profiles reject old OAuth client/token-file configuration; plugin implements no token store or browser OAuth worker"
+  },
+  "limitations": [
+    "live Google consent/import untested",
+    "provider accounts not live-tested",
+    "25 MiB per prepared message in JSON transport",
+    "POP-visible mail only; folders/local archives need separate EML exports",
+    "direct IMAP and PST/MBOX parsing not implemented"
+  ],
+  "provider_catalog": {
+    "total": 38,
+    "additional": 20,
+    "additional_countries": 11
+  },
+  "publication": "GitHub catalog candidate; listing requires maintainer review",
+  "ci": "Linux Python 3.11 and 3.14 workflow provided; see GitHub Actions for its actual status"
+}

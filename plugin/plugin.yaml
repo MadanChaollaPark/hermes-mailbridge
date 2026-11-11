@@ -1,0 +1,51 @@
+name: mailbridge
+version: 0.3.0
+requires_hermes: ">=0.23.1"
+description: Preserve legacy POP and EML mail with resumable Gmail migration, independent verification, and Hermes-managed OAuth.
+author: MadanChaollaPark
+provides_tools:
+  - mailbridge_gmail_connect
+  - mailbridge_gmail_connection_status
+  - mailbridge_providers
+  - mailbridge_inspect
+  - mailbridge_capture
+  - mailbridge_plan
+  - mailbridge_start
+  - mailbridge_status
+  - mailbridge_pause
+  - mailbridge_reconcile
+  - mailbridge_verify
+  - mailbridge_report
+provides_hooks: []
+optional_env:
+  - MAILBRIDGE_GOOGLE_CLIENT_ID
+  - MAILBRIDGE_GOOGLE_CLIENT_SECRET
+  - MAILBRIDGE_POP_PASSWORD
+config_schema:
+  google_client_id:
+    type: secret
+    env: MAILBRIDGE_GOOGLE_CLIENT_ID
+    description: Your Google Desktop OAuth client ID, managed through Hermes settings.
+  google_client_secret:
+    type: secret
+    env: MAILBRIDGE_GOOGLE_CLIENT_SECRET
+    description: Your Google Desktop OAuth client secret, managed through Hermes settings.
+  pop_password:
+    type: secret
+    env: MAILBRIDGE_POP_PASSWORD
+    description: Password or app password for the POP source selected in this Hermes profile.
+oauth:
+  - id: google
+    authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    scopes:
+      - https://www.googleapis.com/auth/gmail.insert
+      - https://www.googleapis.com/auth/gmail.readonly
+      - https://www.googleapis.com/auth/gmail.labels
+    client_id_env: MAILBRIDGE_GOOGLE_CLIENT_ID
+    client_secret_env: MAILBRIDGE_GOOGLE_CLIENT_SECRET
+    hosts: [gmail.googleapis.com]
+    authorize_params:
+      access_type: offline
+      prompt: consent select_account
+python_dependencies: []

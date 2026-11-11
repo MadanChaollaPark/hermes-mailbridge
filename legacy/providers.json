@@ -1,0 +1,918 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-11-11",
+  "policy": "Documentation is not a live integration test. Operators confirm exact account endpoints; source mail is never deleted.",
+  "providers": [
+    {
+      "id": "cafe24",
+      "name": "Cafe24",
+      "country": "South Korea",
+      "country_code": "KR",
+      "group": "previous",
+      "service_scope": "Cafe24 POP/webmail source used by the existing migration project",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Different Cafe24 products have different hosts. Capture only through verified TLS/STARTTLS; use folder EML exports for missing mail.",
+      "sources": [
+        "https://help.cafe24.com/docs/business-tools/webmail/webmail-setup-and-integration-guide/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "hiworks",
+      "name": "Hiworks / Gabia",
+      "country": "South Korea",
+      "country_code": "KR",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop3s.hiworks.com",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official help describes POP-only client access; account settings must enable it.",
+      "sources": [
+        "https://customer.gabia.com/faq/detail/3460/20100"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "naver-works",
+      "name": "NAVER WORKS",
+      "country": "South Korea",
+      "country_code": "KR",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "POP and IMAP access depend on administrator and plan settings. IMAP is available; do not market as POP-only.",
+      "sources": [
+        "https://help.worksmobile.com/en/use-guides/mail/settings/pop3-imap-smtp/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "zoho",
+      "name": "Zoho Mail",
+      "country": "India",
+      "country_code": "IN",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Regional server and plan eligibility vary. Earlier requested provider retained; India is not counted toward the additional developed-country requirement.",
+      "sources": [
+        "https://www.zoho.com/mail/help/pop-access.html"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "fastmail",
+      "name": "Fastmail",
+      "country": "Australia",
+      "country_code": "AU",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop.fastmail.com",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Confirm eligible plan and app password; Basic plans exclude external-client access. Regional endpoints may differ.",
+      "sources": [
+        "https://www.fastmail.help/hc/en-us/articles/1500000278342-Server-names-and-ports"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "migadu",
+      "name": "Migadu",
+      "country": "Switzerland",
+      "country_code": "CH",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Both POP and IMAP supported. Use mailbox credentials rather than administrative API credentials.",
+      "sources": [
+        "https://www.migadu.com/guides/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "mxroute",
+      "name": "MXroute",
+      "country": "United States",
+      "country_code": "US",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "IMAP, POP3 and SMTP supported. Use the assigned account server, not a guessed MX record.",
+      "sources": [
+        "https://docs.mxroute.com/docs/presales/faq-extended.html"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "mailbox-org",
+      "name": "mailbox.org",
+      "country": "Germany",
+      "country_code": "DE",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop3.mailbox.org",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "TLS POP on 995; application password may be needed with two-factor authentication.",
+      "sources": [
+        "https://kb.mailbox.org/en/business/e-mail/e-mail-configuration/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "runbox",
+      "name": "Runbox",
+      "country": "Norway",
+      "country_code": "NO",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "mail.runbox.com",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "POP and IMAP are available. Confirm current encrypted connection settings.",
+      "sources": [
+        "https://help.runbox.com/pop/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "purelymail",
+      "name": "Purelymail",
+      "country": "United States",
+      "country_code": "US",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Supports POP and IMAP. Confirm the POP hostname in account documentation.",
+      "sources": [
+        "https://support.purelymail.com/support/solutions/articles/159000430778-server-settings-imap-smtp-and-pop3"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "bindup",
+      "name": "BiNDup / WebLiFE",
+      "country": "Japan",
+      "country_code": "JP",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "export_only",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official setup requires unencrypted POP. Direct capture is intentionally disabled; obtain EML exports or confirmed secure access from the operator.",
+      "sources": [
+        "https://bindup.jp/support/09/0906/09090600m/"
+      ],
+      "supported_ingestion": [
+        "eml"
+      ]
+    },
+    {
+      "id": "minc",
+      "name": "MINC Internet",
+      "country": "Japan",
+      "country_code": "JP",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "POP-only; documented 365-day retention and 1 GB account quota. Older mail may exist only on computers.",
+      "sources": [
+        "https://support.minc.ne.jp/faq/mail/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "kamome",
+      "name": "Kamome Internet",
+      "country": "Japan",
+      "country_code": "JP",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "mail.kamome.or.jp",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "POP-only; documents SSL on 995 and 100 MB mailbox quota. Username is provider-issued account.",
+      "sources": [
+        "https://www.kamome.or.jp/member/mail/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "itscom",
+      "name": "Itscom",
+      "country": "Japan",
+      "country_code": "JP",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official FAQ explicitly rules out IMAP. Obtain the account-specific secure POP settings.",
+      "sources": [
+        "https://faq.itscom.net/faq/show/12640?site_domain=default"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "sano",
+      "name": "Sano Cable TV",
+      "country": "Japan",
+      "country_code": "JP",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "October 2026 support notice says POP3 only and no current IMAP plans. Confirm sctv.jp versus mirun.sctv.jp account settings.",
+      "sources": [
+        "https://www.sctv.jp/internet/support/support_top.html"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "marinet",
+      "name": "Marinet / Miyagi Cable TV",
+      "country": "Japan",
+      "country_code": "JP",
+      "group": "previous",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop.c-marinet.ne.jp",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "2026 migration notice rules out IMAP; SSL POP on 995 is documented. Use full email address as username.",
+      "sources": [
+        "https://www.m-marinet.co.jp/maintenance/detail.php?id=351"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "gmo-bb",
+      "name": "GMO Tokutoku BB",
+      "country": "Japan",
+      "country_code": "JP",
+      "group": "previous",
+      "service_scope": "Tokutoku BB basic and additional ISP mail; not every GMO product",
+      "pop_access": "documented",
+      "imap_status": "unsupported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Basic/additional ISP mail is POP-only; server retention is 180 days. Large parent company, not a small independent host.",
+      "sources": [
+        "https://help.gmobb.jp/faq/faq_detail.html?id=1021204"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "dynadot-free",
+      "name": "Dynadot Email Free",
+      "country": "United States",
+      "country_code": "US",
+      "group": "previous",
+      "service_scope": "Free Email plan only",
+      "pop_access": "documented",
+      "imap_status": "plan_restricted",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Free plan provides POP-only remote access; Pro adds IMAP and SMTP. This is a plan restriction, not proof of old software.",
+      "sources": [
+        "https://www.dynadot.com/it/help/question/36"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "freeola",
+      "name": "Freeola",
+      "country": "United Kingdom",
+      "country_code": "GB",
+      "group": "additional_20",
+      "service_scope": "One Address / EmailPro; protocol availability varies by product",
+      "pop_access": "documented",
+      "imap_status": "plan_restricted",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "One Address is described as POP; EmailPro offers IMAP. Confirm exact product and secure endpoint.",
+      "sources": [
+        "https://freeola.com/support/freeola-faqs.html"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "aaisp",
+      "name": "Andrews & Arnold (AAISP)",
+      "country": "United Kingdom",
+      "country_code": "GB",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official guidance supports POP3 on 995 and IMAP on 993.",
+      "sources": [
+        "https://support.aa.net.uk/Email_Settings"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "fasthosts",
+      "name": "Fasthosts",
+      "country": "United Kingdom",
+      "country_code": "GB",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Provider confirms POP, IMAP and SMTP settings persist across its platform upgrade; use assigned mailbox setup details.",
+      "sources": [
+        "https://www.fasthosts.co.uk/blog/introducing-our-brand-new-mail-platform/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "aruba",
+      "name": "Aruba domain email",
+      "country": "Italy",
+      "country_code": "IT",
+      "group": "additional_20",
+      "service_scope": "Domain email, excluding PEC-specific preservation claims",
+      "pop_access": "documented",
+      "imap_status": "plan_restricted",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "IMAP is included or available as an add-on depending on package. Do not describe all Aruba mail as POP-only.",
+      "sources": [
+        "https://guide.aruba.it/hosting-e-domini/email/gestione-email/caratteristiche-acquisto-gestione/acquisto-email-e-servizi-aggiuntivi"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "register-it",
+      "name": "Register.it",
+      "country": "Italy",
+      "country_code": "IT",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official help explicitly supports both POP and IMAP. This plugin handles ordinary email; no legal-preservation claims for PEC.",
+      "sources": [
+        "https://www.register.it/assistenza/pop3-imap/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "ovh-mxplan",
+      "name": "OVHcloud MX Plan",
+      "country": "France",
+      "country_code": "FR",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop.mail.ovh.net",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "POP on TLS 995 is documented; confirm region and product. IMAP is also available.",
+      "sources": [
+        "https://docs.ovhcloud.com/en/guides/web-cloud/email-and-collaborative-solutions/mx-plan/landing-page-mx-plan"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "gandi",
+      "name": "Gandi Mail",
+      "country": "France",
+      "country_code": "FR",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "mail.gandi.net",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Standard settings document both POP and IMAP. Confirm account password and secure ports.",
+      "sources": [
+        "https://docs.gandi.net/en/gandimail/standard_email_settings/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "orange",
+      "name": "Orange / Wanadoo mail",
+      "country": "France",
+      "country_code": "FR",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "POP/IMAP must be enabled in mailbox settings. Confirm the current mail-application password requirements.",
+      "sources": [
+        "https://assistance.orange.fr/oid/964290"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "ionos",
+      "name": "IONOS Mail",
+      "country": "Germany",
+      "country_code": "DE",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "POP3 and IMAP documented. Regional endpoints differ; Hosted Exchange is a separate configuration.",
+      "sources": [
+        "https://www.ionos.com/help/index.php?id=2490"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "strato",
+      "name": "STRATO",
+      "country": "Germany",
+      "country_code": "DE",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop3.strato.de",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Documents POP3 over TLS on 995 and IMAP support.",
+      "sources": [
+        "https://www.strato.de/faq/mail/e-mailserver-adressen-ports-ssl-tls/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "freenet",
+      "name": "freenet Mail",
+      "country": "Germany",
+      "country_code": "DE",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "mx.freenet.de",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Documents encrypted POP3 on 995; IMAP is also available. Enable external access in settings.",
+      "sources": [
+        "https://kundenservice.freenet.de/faq/e-mail-client-mail/bei-freenet-mail-verwendete-ports/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "transip",
+      "name": "TransIP",
+      "country": "Netherlands",
+      "country_code": "NL",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop3.transip.email",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official settings support POP3 and IMAP. Confirm credentials and current connection settings.",
+      "sources": [
+        "https://www.transip.eu/knowledgebase/309-the-email-settings-at-transip"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "yourhosting",
+      "name": "Yourhosting",
+      "country": "Netherlands",
+      "country_code": "NL",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "mail.yourhosting.nl",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Documents POP3 on 995 and IMAP on 993. Confirm migrated legacy brands use this platform.",
+      "sources": [
+        "https://www.yourhosting.nl/kennisbank/e-mail/gegevens-om-mail-in-te-stellen/"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "proximus",
+      "name": "Proximus / Skynet",
+      "country": "Belgium",
+      "country_code": "BE",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official support offers POP3 and IMAP configuration. Use the account-specific setup guide.",
+      "sources": [
+        "https://www.proximus.be/support/en/id_smartphone-email-messages/personal/support/smartphone-configuration/smartphone-email-messages.html"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "bell",
+      "name": "Bell / Sympatico",
+      "country": "Canada",
+      "country_code": "CA",
+      "group": "additional_20",
+      "service_scope": "Consumer Bell / Sympatico email",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pophm.sympatico.ca",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official support documents POP and IMAP; consumer and Bellnet business servers differ.",
+      "sources": [
+        "https://support.bell.ca/Internet/Email/How-to-use-Bell-Mail?step=5"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "xtra",
+      "name": "Spark Xtra Mail",
+      "country": "New Zealand",
+      "country_code": "NZ",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop3.xtra.co.nz",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official guide documents POP3 on 995 and IMAP; Spark Business Mail has different endpoints.",
+      "sources": [
+        "https://www.spark.co.nz/help/get-more/xtra/xtra-mail-setup"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "optus",
+      "name": "OptusNet",
+      "country": "Australia",
+      "country_code": "AU",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official help recommends IMAP and also documents POP. Confirm a secure POP endpoint; never downgrade to plaintext.",
+      "sources": [
+        "https://optus.com.au/support/answer/using_an_email_application_with_optusnet_email_1434"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "messaging-company",
+      "name": "The Messaging Company",
+      "country": "Australia",
+      "country_code": "AU",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Provides both protocols; recommends IMAP. Confirm migrated account and current secure POP settings.",
+      "sources": [
+        "https://support.themessaging.co/hc/en-au/articles/7879726922639-Mail-server-settings"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "hinet",
+      "name": "Chunghwa Telecom HiNet",
+      "country": "Taiwan",
+      "country_code": "TW",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "supported",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": null,
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official help explicitly supports POP3 and IMAP with encrypted ports. Host depends on the account domain (MS1–MS82, MSA and other products).",
+      "sources": [
+        "https://lib.webmail.hinet.net/statement/F-soft-1.htm"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    },
+    {
+      "id": "juno",
+      "name": "Juno",
+      "country": "United States",
+      "country_code": "US",
+      "group": "additional_20",
+      "service_scope": "Standard mail service",
+      "pop_access": "documented",
+      "imap_status": "not_documented",
+      "capture_policy": "secure_pop_manual",
+      "suggested_pop_host": "pop.juno.com",
+      "endpoint_confirmation_required": true,
+      "checked_on": "2026-11-11",
+      "evidence_level": "official_documentation",
+      "integration_status": "not_live_tested",
+      "notes": "Official client setup explicitly directs POP instead of IMAP and specifies 995. This is POP-directed documentation, not a universal proof that IMAP is absent.",
+      "sources": [
+        "https://help.juno.com/support/email/tbird.html"
+      ],
+      "supported_ingestion": [
+        "secure_pop",
+        "eml"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "doctor": "pass",
+  "registered_tools": 12,
+  "catalog_entries": 38,
+  "real_registry_dispatch": "pass",
+  "real_hermes_oauth_boundary": "pass: missing grant fails closed",
+  "synthetic_demo": {
+    "ok": true,
+    "id": "91e80980c4e7",
+    "operation": "verify",
+    "status": "complete",
+    "started_at": "2026-11-11T14:14:58.371+00:00",
+    "worker_active": false,
+    "finished_at": "2026-11-11T14:14:58.437+00:00",
+    "migration": {
+      "id": "91e80980c4e7",
+      "kind": "demo",
+      "status": "complete",
+      "prepared": 1,
+      "total": 14,
+      "covered": 14,
+      "local_only": 0,
+      "accounted": 14,
+      "unique_messages": 12,
+      "counts": {
+        "verified": 12,
+        "verified_duplicate": 2
+      },
+      "destination_complete": true,
+      "accounted_complete": true
+    },
+    "synthetic": true,
+    "provider": "cafe24",
+    "capture_scope": "Only inventoried EML files; mailbox completeness is not established.",
+    "verification_scope": "Exact EML bytes and folder mappings in local rehearsal"
+  },
+  "live_account_access": false
+}
