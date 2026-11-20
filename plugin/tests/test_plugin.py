@@ -102,6 +102,20 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(result['status'], 'needs_review')
         self.assertEqual(result['migration']['covered'], 0)
 
+    def test_worker_failure_reports_public_message(self):
+        tid = self.prepare()
+        source = Path(self.s.store.task(tid)['config']['source_root'])
+        file = next(source.rglob('*.eml'))
+        file.write_bytes(file.read_bytes() + b'changed\r\n')
+        self.s.start(tid)
+        result = wait(self.s, tid)
+        self.assertEqual(result['status'], 'needs_review')
+        self.assertEqual(result['error_type'], 'ValueError')
+        self.assertIsInstance(result['error'], str)
+        self.assertNotEqual(result['error'],
+                            'Inspect local configuration or job evidence; no automatic retry was scheduled.')
+        self.assertIn('changed', result['error'])
+
     def test_task_lock_prevents_second_worker(self):
         tid = self.prepare()
         with exclusive(self.s.root / 'locks' / (tid + '.worker')):
@@ -245,6 +259,8 @@ class PluginTests(unittest.TestCase):
         self.assertFalse(result['migration']['destination_complete'])
         self.assertFalse(result['migration']['accounted_complete'])
         self.assertEqual(result['status'], 'needs_review')
+        self.assertEqual(result['error'],
+                         'Inspect local configuration or job evidence; no automatic retry was scheduled.')
         self.assertNotIn('secret provider text', json.dumps(result))
 
     def test_interrupted_job_detection(self):

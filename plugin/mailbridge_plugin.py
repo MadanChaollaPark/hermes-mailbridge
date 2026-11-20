@@ -6,17 +6,7 @@ import os
 from pathlib import Path
 import sys
 
-from bridge_plugin.service import Service
-
-
-def public_error(exc) -> str:
-    import gmail_eml_migration_v2 as core
-
-    if type(exc) is ValueError or type(exc) is core.MigrationError:
-        return str(exc)
-    if type(exc) is KeyError and exc.args == ("Migration not found",):
-        return "Migration not found"
-    return "Inspect local configuration or job evidence; no automatic retry was scheduled."
+from bridge_plugin.service import Service, public_error
 
 
 def main():

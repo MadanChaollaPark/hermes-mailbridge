@@ -33,6 +33,16 @@ ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 SCOPE = "POP-visible messages only; Sent, webmail folders and computer-only archives require separate exports."
 
 
+def public_error(exc) -> str:
+    import gmail_eml_migration_v2 as core
+
+    if type(exc) is ValueError or type(exc) is core.MigrationError:
+        return str(exc)
+    if type(exc) is KeyError and exc.args == ("Migration not found",):
+        return "Migration not found"
+    return "Inspect local configuration or job evidence; no automatic retry was scheduled."
+
+
 def valid_id(value):
     if not isinstance(value, str) or not ID.fullmatch(value):
         raise ValueError("Invalid identifier")
@@ -304,7 +314,7 @@ class Service:
         if not active and job["status"] in {"queued", "running"}:
             result["status"] = "interrupted"
             result["next_action"] = "Resume the same job; uncertain writes will be reconciled first."
-        for key in ("result", "error_type", "finished_at"):
+        for key in ("result", "error_type", "error", "finished_at"):
             if key in job:
                 result[key] = job[key]
         if not tid.startswith("capture-"):
@@ -393,7 +403,8 @@ class Service:
         except Exception as exc:
             job["status"] = "needs_review"
             job["error_type"] = type(exc).__name__
-            # Provider exception strings may contain bodies, addresses or credentials.
+            # Keep only Mailbridge-authored messages and redact provider text.
+            job["error"] = public_error(exc)
             if not tid.startswith("capture-"):
                 config = self.store.task(tid)["config"]
                 if "gmail_report" in config:
