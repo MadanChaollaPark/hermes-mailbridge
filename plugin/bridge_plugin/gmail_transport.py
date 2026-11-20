@@ -38,9 +38,21 @@ class Request:
         self.method, self.body = method, body
         self.url = BASE + quote(account, safe='') + path + ('?' + urlencode(query, doseq=True) if query else '')
 
-    def execute(self, num_retries=0):
+    def execute(self, num_retries=0, timeout=120):
         # Never retry writes here. The migration ledger reconciles ambiguous outcomes.
-        response = host_request('google', self.method, self.url, json=self.body, timeout=120)
+        httpx = None
+        if self.method == 'GET':
+            try:
+                import httpx
+            except ImportError:
+                httpx = None
+        if httpx is not None:
+            try:
+                response = host_request('google', self.method, self.url, json=self.body, timeout=timeout)
+            except httpx.TransportError as exc:
+                raise ConnectionError(f'Gmail transport error ({type(exc).__name__}) on read request') from None
+        else:
+            response = host_request('google', self.method, self.url, json=self.body, timeout=timeout)
         if not 200 <= response.status < 300:
             raise GmailHttpError(response.status, response.body)
         result = response.json()

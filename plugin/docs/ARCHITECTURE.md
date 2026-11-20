@@ -18,7 +18,7 @@ No OAuth callback listener, automatic sign-in, token store, Keychain call or mod
 
 Hermes's public request helper accepts JSON. The adapter encodes preserved RFC822 bytes as the Gmail Message `raw` field, adds required labels, and calls the documented import endpoint. This follows [Gmail messages.import](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/import) and the [Message resource](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages). A conservative 25-MiB per-message limit bounds this nonstreaming transport; larger source messages stop before upload.
 
-Requests do not retry writes. A timeout after acceptance leaves a durable uncertain state; the existing engine searches and verifies destination evidence before allowing progress. Read-only requests use the engine's bounded idempotent retries. Imports disable calendar extraction and never use the deleted option. The adapter exposes no send, delete or arbitrary URL operation.
+Read-only (GET) requests use the engine's bounded idempotent retries for HTTP 429/5xx, transient reasons, and network or timeout errors. Writes are never retried. A timeout after acceptance leaves a durable uncertain state; the existing engine searches and verifies destination evidence before allowing progress. Imports disable calendar extraction and never use the deleted option. The adapter exposes no send, delete or arbitrary URL operation.
 
 ## Runtime and scope
 

@@ -52,9 +52,13 @@ def invoke(action, args, state):
     env = {k: v for k, v in os.environ.items() if k in {"PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR"}
            }
     from agent.secret_scope import get_secret
-    keys = ("MAILBRIDGE_POP_PASSWORD",) if action in {"inspect", "capture"} else (
-        "MAILBRIDGE_GOOGLE_CLIENT_ID", "MAILBRIDGE_GOOGLE_CLIENT_SECRET") if action in {
-            "gmail_connect", "plan", "start", "verify", "reconcile"} else ()
+    keys = ()
+    if action in {"inspect", "capture"}:
+        keys = ("MAILBRIDGE_POP_PASSWORD",)
+    elif action in {"gmail_connect", "start", "verify", "reconcile"} or (
+        action == "plan" and args.get("mode") == "gmail"
+    ):
+        keys = ("MAILBRIDGE_GOOGLE_CLIENT_ID", "MAILBRIDGE_GOOGLE_CLIENT_SECRET")
     for key in keys:
         value = get_secret(key)
         if value:

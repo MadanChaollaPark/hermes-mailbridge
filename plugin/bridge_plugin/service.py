@@ -5,7 +5,7 @@ outlive Hermes tool calls; every operation on a mailbox holds a file lock.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager, nullcontext, suppress
 import fcntl
 import hashlib
 import json
@@ -31,6 +31,16 @@ def secret(name):
 PACKAGE = Path(__file__).resolve().parents[1]
 ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 SCOPE = "POP-visible messages only; Sent, webmail folders and computer-only archives require separate exports."
+
+
+def public_error(exc) -> str:
+    import gmail_eml_migration_v2 as core
+
+    if type(exc) is ValueError or type(exc) in (core.MigrationError, core.AuthRequired, core.RunBlocked):
+        return str(exc)
+    if type(exc) is KeyError and exc.args == ("Migration not found",):
+        return "Migration not found"
+    return "Inspect local configuration or job evidence; no automatic retry was scheduled."
 
 
 def valid_id(value):
@@ -91,7 +101,7 @@ class Service:
         atomic(p, json.dumps(value, indent=2, ensure_ascii=False).encode())
 
     def add_source(self, provider, connection_id, host, username, password_env="MAILBRIDGE_POP_PASSWORD",
-                   security="tls", port=995):
+                   security="tls", port=None):
         p = catalog(provider)
         valid_id(connection_id)
         if p["capture_policy"] == "export_only":
@@ -100,7 +110,11 @@ class Service:
             raise ValueError("Supply the exact provider hostname, without scheme, port or path")
         if not username or any(c in username for c in "\r\n\x00"):
             raise ValueError("Invalid username")
-        if security not in {"tls", "starttls"} or type(port) is not int or not 1 <= port <= 65535:
+        if security not in {"tls", "starttls"}:
+            raise ValueError("TLS or STARTTLS and a valid port are required")
+        if port is None:
+            port = 995 if security == "tls" else 110
+        if type(port) is not int or not 1 <= port <= 65535:
             raise ValueError("TLS or STARTTLS and a valid port are required")
         if password_env != "MAILBRIDGE_POP_PASSWORD":
             raise ValueError("Use the declared MAILBRIDGE_POP_PASSWORD secret in the active Hermes profile")
@@ -123,6 +137,9 @@ class Service:
         if operation not in {"prepare", "run", "verify", "reconcile", "capture"}:
             raise ValueError("Unsupported operation")
         with exclusive(self.root / "locks" / (tid + ".launch")):
+            task = self.store.task(tid) if operation != "capture" else None
+            if task is not None and task["status"] == "abandoned":
+                raise ValueError("Task was abandoned; create a new plan")
             # Parent acquires before spawn; child inherits this exact lock descriptor.
             path = self.root / "locks" / (tid + ".worker")
             fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -130,11 +147,11 @@ class Service:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 job = {"id": tid, "operation": operation, "status": "queued",
                        "started_at": now(), "payload": payload or {}}
-                # Prevent model/provider credentials unrelated to this job being inherited.
                 env = {k: v for k, v in os.environ.items() if k in {
                     "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "SSL_CERT_FILE",
                     "SSL_CERT_DIR", "SYSTEMROOT", "HERMES_HOME", "PYTHONPATH"}}
-                if operation != "capture":
+                # Only Gmail tasks receive the Google OAuth client configuration.
+                if task is not None and task["kind"] == "gmail":
                     for key in ("MAILBRIDGE_GOOGLE_CLIENT_ID", "MAILBRIDGE_GOOGLE_CLIENT_SECRET"):
                         if secret(key):
                             env[key] = secret(key)
@@ -176,33 +193,45 @@ class Service:
     def plan(self, provider="cafe24", mode="demo", source=None, profile=None,
              scenario="recovery", connection_id=None, gmail_connection=None, source_mailbox=None, label_prefix="Mailbridge Archive"):
         catalog(provider)
+        generated_profile = None
         if gmail_connection:
             if mode != "gmail" or profile or connection_id:
                 raise ValueError("Use gmail_connection with mode gmail, source and source_mailbox, without profile or connection_id")
-            from bridge_plugin.gmail_connection import GmailConnections
-            profile = GmailConnections(self).plan_profile(gmail_connection, source, source_mailbox, label_prefix)
-        with exclusive(self.root / "locks" / "create"):
-            if connection_id:
-                if mode != "local":
-                    raise ValueError("connection_id is supported only in local mode; Gmail profiles bind their own source")
-                c = self.load("connections", connection_id)
-                if c["provider"] != provider:
-                    raise ValueError("Connection belongs to another provider")
-                source = str(self.root / "captures" / connection_id)
-            if mode == "demo":
-                tid = self.engine.demo(scenario)
-            elif mode == "local" and source:
-                tid = self.engine.local(source, title=f"{provider} → local rehearsal")
-            elif mode == "gmail" and profile:
-                tid = self.engine.gmail(profile)
-            else:
-                raise ValueError("Use demo, local with a source directory, or gmail with a profile")
-            config = self.store.task(tid)["config"]
-            config["provider"] = provider
-            config["capture_scope"] = SCOPE if connection_id else "Only inventoried EML files; mailbox completeness is not established."
-            if connection_id:
-                config["connection_id"] = connection_id
-            self.store.update_task(tid, config=config)
+            from bridge_plugin.gmail_connection import GmailConnections, remove_plan_profile
+            generated_profile = GmailConnections(self).plan_profile(gmail_connection, source, source_mailbox, label_prefix)
+            profile = generated_profile
+        try:
+            with exclusive(self.root / "locks" / "create"):
+                if connection_id:
+                    if mode != "local":
+                        raise ValueError("connection_id is supported only in local mode; Gmail profiles bind their own source")
+                    c = self.load("connections", connection_id)
+                    if c["provider"] != provider:
+                        raise ValueError("Connection belongs to another provider")
+                    source = str(self.root / "captures" / connection_id)
+                if mode == "demo":
+                    tid = self.engine.demo(scenario)
+                elif mode == "local" and source:
+                    tid = self.engine.local(source, title=f"{provider} → local rehearsal")
+                elif mode == "gmail" and profile:
+                    tid = self.engine.gmail(profile)
+                    generated_profile = None
+                else:
+                    raise ValueError("Use demo, local with a source directory, or gmail with a profile")
+                config = self.store.task(tid)["config"]
+                config["provider"] = provider
+                config["capture_scope"] = SCOPE if connection_id else "Only inventoried EML files; mailbox completeness is not established."
+                if connection_id:
+                    config["connection_id"] = connection_id
+                self.store.update_task(tid, config=config)
+        except BaseException:
+            if generated_profile is not None:
+                # Store.create can fail while logging the event after committing the task.
+                with suppress(Exception):
+                    if not any(task["config"].get("profile") == generated_profile
+                               for task in self.store.tasks()):
+                        remove_plan_profile(generated_profile)
+            raise
         return self.launch(tid, "prepare")
 
     def plan_digest(self, tid, validate_source=True):
@@ -244,6 +273,19 @@ class Service:
                                      "scope": "run_this_frozen_plan", "approved_at": now()})
         return {"job_id": tid, "authorized": True}
 
+    def abandon(self, tid):
+        valid_id(tid)
+        with exclusive(self.root / "locks" / (tid + ".launch")):
+            with exclusive(self.root / "locks" / (tid + ".worker")):
+                task = self.store.task(tid)
+                if task["status"] in {"complete", "complete_with_exceptions", "abandoned"}:
+                    raise ValueError("Task is already finished or abandoned")
+                if self.store.messages(tid, statuses=["uncertain", "inflight"]):
+                    raise ValueError("Reconcile uncertain writes before abandoning this task")
+                self.file("grants", tid).unlink(missing_ok=True)
+                self.store.update_task(tid, status="abandoned", approved=0, final_verified=0)
+        return {"job_id": tid, "abandoned": True, "previous_status": task["status"]}
+
     def authorized(self, tid, validate_source=True):
         task = self.store.task(tid)
         if task["kind"] != "gmail":
@@ -260,6 +302,8 @@ class Service:
 
     def start(self, tid):
         task = self.store.task(tid)
+        if task["status"] == "abandoned":
+            raise ValueError("Task was abandoned; create a new plan")
         if task["status"] in {"complete", "complete_with_exceptions"}:
             raise ValueError("Run is finished; request verification or create another plan")
         # Large source scans belong to the durable worker, not the short tool call.
@@ -282,7 +326,7 @@ class Service:
         if not active and job["status"] in {"queued", "running"}:
             result["status"] = "interrupted"
             result["next_action"] = "Resume the same job; uncertain writes will be reconciled first."
-        for key in ("result", "error_type", "finished_at"):
+        for key in ("result", "error_type", "error", "finished_at"):
             if key in job:
                 result[key] = job[key]
         if not tid.startswith("capture-"):
@@ -296,6 +340,14 @@ class Service:
             result["verification_scope"] = task["config"].get("gmail_report", {}).get(
                 "verification_scope", "Exact EML bytes and folder mappings in local rehearsal" if task["kind"] != "gmail"
                 else "Gmail IDs, selected headers, dates and labels; not universal byte equality")
+            if task["kind"] == "gmail":
+                logs = self.root / "logs"
+                result["engine_logs"] = [] if logs.is_symlink() else sorted(
+                    str(path) for path in logs.glob(f"{tid}.*.log")
+                    if not path.is_symlink() and path.is_file())
+                if not active and task["status"] not in {"complete", "complete_with_exceptions", "abandoned"}:
+                    result["abandon_command"] = [sys.executable, str(PACKAGE / "mailbridge_plugin.py"),
+                        "--state", str(self.root), "abandon", tid]
             if task["prepared"] and task["kind"] == "gmail":
                 result["destination"] = task["config"]["destination"]
                 result["approval_command"] = [sys.executable, str(PACKAGE / "mailbridge_plugin.py"),
@@ -366,7 +418,8 @@ class Service:
         except Exception as exc:
             job["status"] = "needs_review"
             job["error_type"] = type(exc).__name__
-            # Provider exception strings may contain bodies, addresses or credentials.
+            # Keep only Mailbridge-authored messages and redact provider text.
+            job["error"] = public_error(exc)
             if not tid.startswith("capture-"):
                 config = self.store.task(tid)["config"]
                 if "gmail_report" in config:

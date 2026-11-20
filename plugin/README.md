@@ -52,7 +52,7 @@ python3 mailbridge_plugin.py --state /absolute/profile-home/plugin-data/mailbrid
   --security tls --port 995
 ```
 
-No password is accepted on the command line or stored in the source record. The declared secret is resolved with `agent.secret_scope.get_secret`, respecting the active Hermes profile. Only that scoped source password is forwarded to its capture worker. Use a separate profile when another source needs a different simultaneous credential. For documented STARTTLS servers use `--security starttls --port 110`; there is no plaintext fallback.
+No password is accepted on the command line or stored in the source record. The declared secret is resolved with `agent.secret_scope.get_secret`, respecting the active Hermes profile. Only that scoped source password is forwarded to its capture worker. Use a separate profile when another source needs a different simultaneous credential. For documented STARTTLS servers, `--security starttls` defaults to port 110. Use `--port` to override it when the provider documents a different port. There is no plaintext fallback.
 
 Ask Hermes to inspect `old-mail`, capture a bounded batch (default 200), then poll the job ID. Subsequent captures resume by UIDL and verify existing file hashes. No `DELE` command is issued. Captured EML files are under `plugin-data/mailbridge/captures/old-mail/Inbox`.
 
@@ -73,6 +73,8 @@ Alternatively use an operator-created [profile](examples/profile.example.json) w
 Review the frozen count, destination and scope. Run the exact `approval_command` returned by status in your local terminal and type the destination and fingerprint. Approval applies only to this frozen plan; source changes invalidate it. Hermes then starts the worker, polls progress, verifies and saves a report. A pilot requires a separate small EML source and profile.
 
 The operator approval is a workflow guardrail, not an OS sandbox against arbitrary file/terminal access. The bundled skill instructs the agent not to forge or execute approval. Revoking permission prevents future starts; it cannot undo an in-flight import.
+
+Close a failed or unwanted plan locally with `python3 mailbridge_plugin.py --state <state> abandon <job_id>` once its worker has stopped and any uncertain writes have been reconciled. Abandoning removes the approval, preserves imported mail, and frees the destination for a new plan.
 
 Workers survive tool calls and agent restarts. Locks serialize each task, source and destination within one Hermes profile, plus the engine's checkpoint lock. Do not run another profile or external importer against the same destination concurrently. Resume the same job after interruption. Ambiguous uploads are reconciled using Gmail evidence, never blindly retried.
 

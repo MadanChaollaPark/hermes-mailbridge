@@ -11,6 +11,9 @@ from pathlib import Path
 
 from .engine import atomic, digest
 
+# Above Gmail's 25 MiB import limit. The stdlib default of 2048 rejects real-world mail.
+MAX_LINE_BYTES = 32 * 1024 * 1024
+
 
 def capture(host, username, password, output: Path, security="tls", port=None, limit=None, connect=None):
     if security not in {"tls", "starttls"}:
@@ -37,51 +40,56 @@ def capture(host, username, password, output: Path, security="tls", port=None, l
         state = json.loads(state_path.read_text()) if state_path.exists() else {"source": source, "items": {}}
         if state["source"] != source:
             raise ValueError("Capture directory is bound to another POP3 account")
-        context = ssl.create_default_context()
-        client = connect(host, port) if connect else (poplib.POP3_SSL(host, port, timeout=30, context=context) if security == "tls" else poplib.POP3(host, port, timeout=30))
-        downloaded = 0
+        previous_maxline = poplib._MAXLINE
+        poplib._MAXLINE = max(previous_maxline, MAX_LINE_BYTES)
         try:
-            if security == "starttls":
-                client.stls(context=context)
-            client.user(username)
-            client.pass_(password)
-            _, listings, _ = client.uidl()
-            seen = set()
-            available = []
-            for line in listings:
-                number, uid_bytes = line.split(maxsplit=1)
-                uid = uid_bytes.decode("ascii")
-                if uid in seen:
-                    raise ValueError("Server returned duplicate UIDLs")
-                seen.add(uid)
-                available.append((int(number), uid))
-            for number, uid in available:
-                filename = "Inbox/" + hashlib.sha256(uid.encode()).hexdigest() + ".eml"
-                path = output / filename
-                prior = state["items"].get(uid)
-                if prior:
-                    if prior["path"] != filename or path.is_symlink() or digest(path.read_bytes()) != prior["sha256"]:
-                        raise ValueError("A captured source file changed")
-                    continue
-                if limit is not None and downloaded >= limit:
-                    continue
-                _, lines, _ = client.retr(number)
-                raw = b"\r\n".join(lines) + b"\r\n"
-                if path.exists():
-                    if path.is_symlink() or path.read_bytes() != raw:
-                        raise ValueError("Untracked capture file differs from the current message")
-                else:
-                    atomic(path, raw)
-                state["items"][uid] = {"path": filename, "sha256": digest(raw), "size": len(raw)}
-                state["listed_this_session"] = len(available)
-                atomic(state_path, json.dumps(state, indent=2).encode())
-                downloaded += 1
-        finally:
-            # QUIT commits no deletions because DELE is never issued.
+            context = ssl.create_default_context()
+            client = connect(host, port) if connect else (poplib.POP3_SSL(host, port, timeout=30, context=context) if security == "tls" else poplib.POP3(host, port, timeout=30))
+            downloaded = 0
             try:
-                client.quit()
-            except Exception:
-                client.close()
+                if security == "starttls":
+                    client.stls(context=context)
+                client.user(username)
+                client.pass_(password)
+                _, listings, _ = client.uidl()
+                seen = set()
+                available = []
+                for line in listings:
+                    number, uid_bytes = line.split(maxsplit=1)
+                    uid = uid_bytes.decode("ascii")
+                    if uid in seen:
+                        raise ValueError("Server returned duplicate UIDLs")
+                    seen.add(uid)
+                    available.append((int(number), uid))
+                for number, uid in available:
+                    filename = "Inbox/" + hashlib.sha256(uid.encode()).hexdigest() + ".eml"
+                    path = output / filename
+                    prior = state["items"].get(uid)
+                    if prior:
+                        if prior["path"] != filename or path.is_symlink() or digest(path.read_bytes()) != prior["sha256"]:
+                            raise ValueError("A captured source file changed")
+                        continue
+                    if limit is not None and downloaded >= limit:
+                        continue
+                    _, lines, _ = client.retr(number)
+                    raw = b"\r\n".join(lines) + b"\r\n"
+                    if path.exists():
+                        if path.is_symlink() or path.read_bytes() != raw:
+                            raise ValueError("Untracked capture file differs from the current message")
+                    else:
+                        atomic(path, raw)
+                    state["items"][uid] = {"path": filename, "sha256": digest(raw), "size": len(raw)}
+                    state["listed_this_session"] = len(available)
+                    atomic(state_path, json.dumps(state, indent=2).encode())
+                    downloaded += 1
+            finally:
+                # QUIT commits no deletions because DELE is never issued.
+                try:
+                    client.quit()
+                except Exception:
+                    client.close()
+        finally:
+            poplib._MAXLINE = previous_maxline
         return {"downloaded_this_run": downloaded, "captured_total": len(state["items"]),
                 "listed_this_session": len(available), "source_deleted": 0,
                 "scope": "Messages exposed by this POP3 account; not Sent, all webmail folders, or computer-only mail"}

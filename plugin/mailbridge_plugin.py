@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 
-from bridge_plugin.service import Service
+from bridge_plugin.service import Service, public_error
 
 
 def main():
@@ -21,12 +21,14 @@ def main():
     approve.add_argument("job_id")
     revoke = sub.add_parser("revoke", help="Revoke permission for future runs; active imports finish")
     revoke.add_argument("job_id")
+    abandon = sub.add_parser("abandon", help="Abandon a stuck or unwanted plan so its destination can be planned again; does not delete imported mail")
+    abandon.add_argument("job_id")
     source = sub.add_parser("source-add", help="Register a source; credentials stay in environment")
     for name in ("provider", "connection-id", "host", "username"):
         source.add_argument("--" + name, required=True)
     source.add_argument("--password-env", default="MAILBRIDGE_POP_PASSWORD", choices=["MAILBRIDGE_POP_PASSWORD"])
     source.add_argument("--security", choices=["tls", "starttls"], default="tls")
-    source.add_argument("--port", type=int, default=995)
+    source.add_argument("--port", type=int, default=None, help="Defaults to 995 for tls, 110 for starttls")
     sub.add_parser("providers", help="Print the provider catalog")
     args = p.parse_args()
     service = Service(args.state)
@@ -45,6 +47,8 @@ def main():
             grant = service.file("grants", args.job_id)
             grant.unlink(missing_ok=True)
             result = {"job_id": args.job_id, "revoked": True, "active_import_stopped": False}
+        elif args.command == "abandon":
+            result = service.abandon(args.job_id)
         else:
             if not sys.stdin.isatty():
                 raise ValueError("Approval requires an interactive local terminal")
@@ -59,8 +63,9 @@ def main():
             result = service.approve(args.job_id, destination, fingerprint)
         print(json.dumps({"ok": True, **result}, ensure_ascii=False))
     except Exception as exc:
-        # Fixed messages for controlled errors only; never echo provider responses.
-        message = str(exc) if type(exc) is ValueError else "Inspect local configuration or job evidence; no automatic retry was scheduled."
+        # Show exact Mailbridge-authored ValueError, MigrationError, AuthRequired,
+        # RunBlocked, and the task-not-found KeyError. Redact provider responses.
+        message = public_error(exc)
         print(json.dumps({"ok": False, "error_type": type(exc).__name__, "error": message}))
         return 1
 

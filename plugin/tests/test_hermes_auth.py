@@ -9,16 +9,19 @@ import io
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
+import stat
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 from urllib.parse import urlparse, parse_qs, unquote
 
+import httpx
+
 import gmail_eml_migration_v2 as core
-from bridge_plugin import gmail_transport as transport
+from bridge_plugin import gmail_connection, gmail_transport as transport
 from bridge_plugin.gmail_connection import GmailConnections
-from bridge_plugin.service import Service, secret
+from bridge_plugin.service import Service, public_error, secret
 import hermes_tools
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +65,55 @@ class HermesAuthTests(unittest.TestCase):
         self.assertEqual(self.conn.status()['connections'],[])
         self.assertNotIn('fictional-client-secret',json.dumps(result))
 
+    def test_connect_returns_redacted_http_errors_without_binding(self):
+        body = b'{"error":{"message":"SECRET-DETAIL accessNotConfigured"}}'
+        for code, status in ((403, 'access_denied'), (429, 'temporarily_unavailable'),
+                             (503, 'temporarily_unavailable')):
+            with self.subTest(code=code):
+                error = transport.GmailHttpError(code, body)
+                with mock.patch.object(transport, 'host_request', side_effect=error):
+                    result = self.conn.connect()
+                self.assertEqual(result['status'], status)
+                self.assertEqual(result['http_status'], code)
+                self.assertFalse(result['migration_started'])
+                serialized = json.dumps(result)
+                self.assertNotIn('SECRET-DETAIL', serialized)
+                self.assertNotIn('fictional-client-secret', serialized)
+                self.assertEqual(self.conn.status()['connections'], [])
+                if code == 403:
+                    self.assertEqual(result['sign_in_command'], gmail_connection.AUTH_COMMAND)
+
+    def test_connect_returns_redacted_network_errors_without_binding(self):
+        for error in (httpx.ConnectError('SECRET-DETAIL'), TimeoutError('SECRET-DETAIL')):
+            with self.subTest(error_type=type(error).__name__):
+                with mock.patch.object(transport, 'host_request', side_effect=error):
+                    result = self.conn.connect()
+                self.assertEqual(result['status'], 'network_error')
+                self.assertFalse(result['migration_started'])
+                self.assertNotIn('SECRET-DETAIL', json.dumps(result))
+                self.assertEqual(self.conn.status()['connections'], [])
+
+    def test_connect_reraises_unhandled_http_error(self):
+        with mock.patch.object(transport, 'host_request', side_effect=transport.GmailHttpError(404)):
+            with self.assertRaises(transport.GmailHttpError) as raised:
+                self.conn.connect()
+        self.assertEqual(
+            public_error(raised.exception),
+            'Inspect local configuration or job evidence; no automatic retry was scheduled.',
+        )
+        self.assertEqual(self.conn.status()['connections'], [])
+
+    def test_connect_timeout_preserves_transport_default(self):
+        with mock.patch.object(transport, 'host_request',
+                               return_value=response({'emailAddress': 'dest@example.test'})) as host:
+            self.conn.connect()
+        self.assertEqual(host.call_args.kwargs['timeout'], gmail_connection.CONNECT_TIMEOUT)
+        self.assertLess(gmail_connection.CONNECT_TIMEOUT, 20)
+
+        with mock.patch.object(transport, 'host_request', return_value=response({'labels': []})) as host:
+            transport.GmailService().labels().list(userId='me').execute()
+        self.assertEqual(host.call_args.kwargs['timeout'], 120)
+
     def test_account_choice_is_verified_and_no_token_is_saved(self):
         with mock.patch.object(transport,'host_request',return_value=response({'emailAddress':'dest@example.test'})):
             result=self.conn.connect(email='dest@example.test')
@@ -76,6 +128,103 @@ class HermesAuthTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.conn.connect(email='dest@example.test')
         self.assertEqual(self.conn.status()['connections'],[])
+
+    def test_account_switch_reports_exact_account_mismatch(self):
+        with mock.patch.object(transport, 'host_request', return_value=response({'emailAddress': 'other@example.test'})):
+            with self.assertRaises(core.AuthRequired) as raised:
+                core.verify_exact_account(transport.GmailService(), 'dest@example.test')
+        self.assertEqual(
+            public_error(raised.exception),
+            'Authorized account is other@example.test, expected dest@example.test.',
+        )
+
+    def connected_plan_inputs(self, status='connected', email='dest@example.test'):
+        self.service.save('gmail-connections', 'gmail-abc', {
+            'connection_id': 'gmail-abc', 'status': status, 'email': email,
+            'verified_at': '2026-11-02T00:00:00Z', 'auth_provider': 'google',
+        })
+        source = self.root / 'export'
+        inbox = source / 'Inbox'
+        inbox.mkdir(parents=True)
+        (inbox / 'message.eml').write_bytes(
+            b'From: sender@example.test\r\nTo: old@example.test\r\n'
+            b'Message-ID: <fixture@example.test>\r\nSubject: Fixture\r\n\r\nBody\r\n'
+        )
+        return dict(gmail_connection='gmail-abc', source=str(source), source_mailbox='Old@Example.Test')
+
+    def test_connected_plan_profile(self):
+        inputs = self.connected_plan_inputs()
+        path = Path(self.conn.plan_profile('gmail-abc', inputs['source'], inputs['source_mailbox']))
+        self.assertEqual(path.parent.parent, self.service.root / 'gmail-plans')
+        self.assertEqual(path.name, 'profile.json')
+        profile = core.load_profile(path)
+        self.assertEqual(profile.destination, 'dest@example.test')
+        self.assertEqual(profile.source_mailbox, 'old@example.test')
+        self.assertEqual(profile.token_store_type, 'hermes')
+        for item, mode in ((path.parent.parent, 0o700), (path.parent, 0o700), (path, 0o600)):
+            self.assertEqual(stat.S_IMODE(item.stat().st_mode), mode)
+
+    def test_connected_plan_profile_rejects_invalid_inputs_before_creating_directories(self):
+        inputs = self.connected_plan_inputs(status='pending')
+        plans = self.service.root / 'gmail-plans'
+        with self.assertRaisesRegex(ValueError, 'Verify the Hermes Google account first'):
+            self.conn.plan_profile('gmail-abc', inputs['source'], inputs['source_mailbox'])
+        self.assertFalse(plans.exists())
+        binding = self.conn.record('gmail-abc')
+        self.service.save('gmail-connections', 'gmail-abc', binding | {'status': 'connected'})
+        for source in ('relative', str(self.root / 'missing')):
+            with self.subTest(source=source):
+                with self.assertRaisesRegex(ValueError, 'Source must be an existing absolute EML directory'):
+                    self.conn.plan_profile('gmail-abc', source, inputs['source_mailbox'])
+                self.assertFalse(plans.exists())
+        with self.assertRaisesRegex(core.MigrationError, 'Profile source_mailbox is not a valid mailbox address'):
+            self.conn.plan_profile('gmail-abc', inputs['source'], 'not an email')
+        self.assertFalse(plans.exists())
+
+    def test_connected_plan_removes_profile_when_profile_validation_fails(self):
+        inputs = self.connected_plan_inputs(email='not an email')
+        with self.assertRaisesRegex(core.MigrationError, 'Profile destination is not a valid mailbox address'):
+            self.conn.plan_profile('gmail-abc', inputs['source'], inputs['source_mailbox'])
+        self.assertEqual(list((self.service.root / 'gmail-plans').iterdir()), [])
+
+    def test_connected_plan_removes_profile_when_profile_write_fails(self):
+        inputs = self.connected_plan_inputs()
+        error = OSError('write interrupted')
+        with mock.patch.object(core, 'write_json_atomic', side_effect=error):
+            with self.assertRaises(OSError) as raised:
+                self.conn.plan_profile('gmail-abc', inputs['source'], inputs['source_mailbox'])
+        self.assertIs(raised.exception, error)
+        self.assertEqual(list((self.service.root / 'gmail-plans').iterdir()), [])
+
+    def test_connected_plan_conflict_preserves_existing_and_caller_profiles(self):
+        inputs = self.connected_plan_inputs()
+        caller_profile = self.profile().path
+        plans = self.service.root / 'gmail-plans'
+        with mock.patch.object(Service, 'launch', side_effect=lambda tid, operation: {'job_id': tid}) as launch:
+            result = self.service.plan(mode='gmail', **inputs)
+            directory, = plans.iterdir()
+            with self.assertRaisesRegex(ValueError, 'already owns this Gmail destination'):
+                self.service.plan(mode='gmail', **inputs)
+            with self.assertRaisesRegex(ValueError, 'already owns this Gmail destination'):
+                self.service.plan(mode='gmail', profile=str(caller_profile))
+        launch.assert_called_once_with(result['job_id'], 'prepare')
+        task = self.service.store.task(result['job_id'])
+        profile = directory / 'profile.json'
+        self.assertEqual(task['config']['profile'], str(profile))
+        self.assertTrue(profile.is_file())
+        self.assertEqual(list(plans.iterdir()), [directory])
+        self.assertTrue(caller_profile.is_file())
+
+    def test_connected_plan_keeps_profile_when_task_event_fails_after_creation(self):
+        inputs = self.connected_plan_inputs()
+        error = OSError('event write failed')
+        with mock.patch.object(self.service.store, 'event', side_effect=error), mock.patch.object(Service, 'launch') as launch:
+            with self.assertRaises(OSError) as raised:
+                self.service.plan(mode='gmail', **inputs)
+        self.assertIs(raised.exception, error)
+        launch.assert_not_called()
+        task, = self.service.store.tasks()
+        self.assertTrue(Path(task['config']['profile']).is_file())
 
     def test_profiles_refuse_legacy_credential_files_before_reading_them(self):
         profile=self.profile()
@@ -105,6 +254,40 @@ class HermesAuthTests(unittest.TestCase):
         self.assertNotIn('UNRELATED_API_KEY',env)
         self.assertEqual(env['HERMES_HOME'],str(self.root/'profile'))
         with self.assertRaises(ValueError): secret('UNRELATED_API_KEY')
+
+    def test_read_transport_error_is_retried_by_engine(self):
+        labels = response({'labels': [{'id': 'INBOX', 'name': 'INBOX'}]})
+        with mock.patch.object(transport, 'host_request', side_effect=[httpx.ConnectError('boom'), labels]) as host, \
+                mock.patch.object(core.time, 'sleep'):
+            result = core.list_gmail_labels(transport.GmailService('dest@example.test'))
+        self.assertEqual(result, {'INBOX': 'INBOX'})
+        self.assertEqual(host.call_count, 2)
+
+    def test_read_transport_error_is_bounded(self):
+        with mock.patch.object(transport, 'host_request', side_effect=httpx.ReadTimeout('slow')) as host, \
+                mock.patch.object(core.time, 'sleep'):
+            with self.assertRaises(core.MigrationError):
+                core.list_gmail_labels(transport.GmailService('dest@example.test'))
+        self.assertEqual(host.call_count, 5)
+
+    def test_get_wrapper_does_not_leak_message(self):
+        request = transport.GmailService('dest@example.test').labels().list(userId='me')
+        with mock.patch.object(transport, 'host_request', side_effect=httpx.ConnectError('secret-ish detail')):
+            with self.assertRaises(ConnectionError) as raised:
+                request.execute()
+        self.assertNotIn('secret-ish detail', str(raised.exception))
+
+    def test_write_transport_error_is_not_retried_or_rewrapped(self):
+        media = transport.Media(io.BytesIO(b'From: a@example.test\r\n\r\nbody'), 'message/rfc822')
+        request = transport.GmailService('dest@example.test').messages().import_(userId='me',
+            body={'labelIds': ['INBOX']}, media_body=media, internalDateSource='dateHeader',
+            neverMarkSpam=True, processForCalendar=False, deleted=False, fields='id')
+        error = httpx.ConnectError('lost')
+        with mock.patch.object(transport, 'host_request', side_effect=error) as host:
+            with self.assertRaises(httpx.ConnectError) as raised:
+                request.execute()
+        self.assertIs(raised.exception, error)
+        self.assertEqual(host.call_count, 1)
 
     def test_utf8_import_is_exact_json_with_no_write_retries(self):
         raw=b'From: a@example.test\r\n\r\n'+ '안녕하세요'.encode()
