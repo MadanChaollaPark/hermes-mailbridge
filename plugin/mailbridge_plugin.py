@@ -63,8 +63,8 @@ def main():
             result = service.approve(args.job_id, destination, fingerprint)
         print(json.dumps({"ok": True, **result}, ensure_ascii=False))
     except Exception as exc:
-        # Show Mailbridge-authored ValueError, core MigrationError, and the
-        # task-not-found KeyError. Redact everything else, including provider responses.
+        # Show exact Mailbridge-authored ValueError, MigrationError, AuthRequired,
+        # RunBlocked, and the task-not-found KeyError. Redact provider responses.
         message = public_error(exc)
         print(json.dumps({"ok": False, "error_type": type(exc).__name__, "error": message}))
         return 1

@@ -36,7 +36,7 @@ SCOPE = "POP-visible messages only; Sent, webmail folders and computer-only arch
 def public_error(exc) -> str:
     import gmail_eml_migration_v2 as core
 
-    if type(exc) is ValueError or type(exc) is core.MigrationError:
+    if type(exc) is ValueError or type(exc) in (core.MigrationError, core.AuthRequired, core.RunBlocked):
         return str(exc)
     if type(exc) is KeyError and exc.args == ("Migration not found",):
         return "Migration not found"

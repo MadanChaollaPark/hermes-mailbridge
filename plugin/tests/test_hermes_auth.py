@@ -21,7 +21,7 @@ import httpx
 import gmail_eml_migration_v2 as core
 from bridge_plugin import gmail_transport as transport
 from bridge_plugin.gmail_connection import GmailConnections
-from bridge_plugin.service import Service, secret
+from bridge_plugin.service import Service, public_error, secret
 import hermes_tools
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,6 +79,15 @@ class HermesAuthTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.conn.connect(email='dest@example.test')
         self.assertEqual(self.conn.status()['connections'],[])
+
+    def test_account_switch_reports_exact_account_mismatch(self):
+        with mock.patch.object(transport, 'host_request', return_value=response({'emailAddress': 'other@example.test'})):
+            with self.assertRaises(core.AuthRequired) as raised:
+                core.verify_exact_account(transport.GmailService(), 'dest@example.test')
+        self.assertEqual(
+            public_error(raised.exception),
+            'Authorized account is other@example.test, expected dest@example.test.',
+        )
 
     def connected_plan_inputs(self, status='connected', email='dest@example.test'):
         self.service.save('gmail-connections', 'gmail-abc', {

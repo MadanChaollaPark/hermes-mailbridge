@@ -133,9 +133,16 @@ class PluginTests(unittest.TestCase):
         class DerivedMigrationError(core.MigrationError):
             pass
 
+        class DerivedAuth(core.AuthRequired):
+            pass
+
         self.assertEqual(public_error(ValueError('x')), 'x')
         message = 'Profile schema_version must be 1.'
         self.assertEqual(public_error(core.MigrationError(message)), message)
+        message = 'Authorized account is a@example.test, expected b@example.test.'
+        self.assertEqual(public_error(core.AuthRequired(message)), message)
+        message = 'STOPPED before the next message; inspect the checkpoint and use review/resume.'
+        self.assertEqual(public_error(core.RunBlocked(message)), message)
         self.assertEqual(public_error(KeyError('Migration not found')), 'Migration not found')
         generic = 'Inspect local configuration or job evidence; no automatic retry was scheduled.'
         for exc in (
@@ -144,6 +151,7 @@ class PluginTests(unittest.TestCase):
             GmailHttpError(500, b'{"token":"secret body"}'),
             json.JSONDecodeError('m', 'doc', 0),
             DerivedMigrationError('secret body'),
+            DerivedAuth('secret body'),
         ):
             with self.subTest(error_type=type(exc).__name__):
                 self.assertEqual(public_error(exc), generic)
