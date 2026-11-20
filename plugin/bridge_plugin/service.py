@@ -5,7 +5,7 @@ outlive Hermes tool calls; every operation on a mailbox holds a file lock.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager, nullcontext, suppress
 import fcntl
 import hashlib
 import json
@@ -193,33 +193,45 @@ class Service:
     def plan(self, provider="cafe24", mode="demo", source=None, profile=None,
              scenario="recovery", connection_id=None, gmail_connection=None, source_mailbox=None, label_prefix="Mailbridge Archive"):
         catalog(provider)
+        generated_profile = None
         if gmail_connection:
             if mode != "gmail" or profile or connection_id:
                 raise ValueError("Use gmail_connection with mode gmail, source and source_mailbox, without profile or connection_id")
-            from bridge_plugin.gmail_connection import GmailConnections
-            profile = GmailConnections(self).plan_profile(gmail_connection, source, source_mailbox, label_prefix)
-        with exclusive(self.root / "locks" / "create"):
-            if connection_id:
-                if mode != "local":
-                    raise ValueError("connection_id is supported only in local mode; Gmail profiles bind their own source")
-                c = self.load("connections", connection_id)
-                if c["provider"] != provider:
-                    raise ValueError("Connection belongs to another provider")
-                source = str(self.root / "captures" / connection_id)
-            if mode == "demo":
-                tid = self.engine.demo(scenario)
-            elif mode == "local" and source:
-                tid = self.engine.local(source, title=f"{provider} → local rehearsal")
-            elif mode == "gmail" and profile:
-                tid = self.engine.gmail(profile)
-            else:
-                raise ValueError("Use demo, local with a source directory, or gmail with a profile")
-            config = self.store.task(tid)["config"]
-            config["provider"] = provider
-            config["capture_scope"] = SCOPE if connection_id else "Only inventoried EML files; mailbox completeness is not established."
-            if connection_id:
-                config["connection_id"] = connection_id
-            self.store.update_task(tid, config=config)
+            from bridge_plugin.gmail_connection import GmailConnections, remove_plan_profile
+            generated_profile = GmailConnections(self).plan_profile(gmail_connection, source, source_mailbox, label_prefix)
+            profile = generated_profile
+        try:
+            with exclusive(self.root / "locks" / "create"):
+                if connection_id:
+                    if mode != "local":
+                        raise ValueError("connection_id is supported only in local mode; Gmail profiles bind their own source")
+                    c = self.load("connections", connection_id)
+                    if c["provider"] != provider:
+                        raise ValueError("Connection belongs to another provider")
+                    source = str(self.root / "captures" / connection_id)
+                if mode == "demo":
+                    tid = self.engine.demo(scenario)
+                elif mode == "local" and source:
+                    tid = self.engine.local(source, title=f"{provider} → local rehearsal")
+                elif mode == "gmail" and profile:
+                    tid = self.engine.gmail(profile)
+                    generated_profile = None
+                else:
+                    raise ValueError("Use demo, local with a source directory, or gmail with a profile")
+                config = self.store.task(tid)["config"]
+                config["provider"] = provider
+                config["capture_scope"] = SCOPE if connection_id else "Only inventoried EML files; mailbox completeness is not established."
+                if connection_id:
+                    config["connection_id"] = connection_id
+                self.store.update_task(tid, config=config)
+        except BaseException:
+            if generated_profile is not None:
+                # Store.create can fail while logging the event after committing the task.
+                with suppress(Exception):
+                    if not any(task["config"].get("profile") == generated_profile
+                               for task in self.store.tasks()):
+                        remove_plan_profile(generated_profile)
+            raise
         return self.launch(tid, "prepare")
 
     def plan_digest(self, tid, validate_source=True):

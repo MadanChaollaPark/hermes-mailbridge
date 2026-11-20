@@ -1,4 +1,5 @@
 """Nonsecret account binding; Hermes alone performs OAuth sign-in and refresh."""
+from contextlib import suppress
 import json
 from pathlib import Path
 import uuid
@@ -8,6 +9,14 @@ from bridge_plugin.service import valid_id
 from mailbridge.store import now
 
 AUTH_COMMAND = 'hermes auth add mailbridge:google'
+
+
+def remove_plan_profile(path):
+    path = Path(path)
+    with suppress(OSError):
+        path.unlink(missing_ok=True)
+    with suppress(OSError):
+        path.parent.rmdir()
 
 
 class GmailConnections:
@@ -61,13 +70,21 @@ class GmailConnections:
         source = Path(source).expanduser()
         if not source.is_absolute() or not source.is_dir():
             raise ValueError('Source must be an existing absolute EML directory')
-        directory = self.root / 'gmail-plans' / uuid.uuid4().hex[:12]
+        core.normalize_mailbox(source_mailbox, 'source_mailbox')
+        plans = self.root / 'gmail-plans'
+        directory = plans / uuid.uuid4().hex[:12]
         profile = dict(schema_version=1, migration_id=directory.name,
             source_root=str(source.resolve()), source_mailbox=source_mailbox, destination=record['email'],
             state_dir=str(directory / 'engine-state'), auth_provider='google', token_store={'type':'hermes'},
             label_prefix=label_prefix, custom_label_policy='archive_prefix_and_folder', root_folder='Inbox',
             inbox_folders=['Inbox'], google_rejection_policy='stop', missing_message_id_policy='stop')
         path = directory / 'profile.json'
-        core.write_json_atomic(path, profile, mode=0o600)
-        core.load_profile(path)
+        plans.mkdir(mode=0o700, exist_ok=True)
+        directory.mkdir(mode=0o700)
+        try:
+            core.write_json_atomic(path, profile, mode=0o600)
+            core.load_profile(path)
+        except BaseException:
+            remove_plan_profile(path)
+            raise
         return str(path)

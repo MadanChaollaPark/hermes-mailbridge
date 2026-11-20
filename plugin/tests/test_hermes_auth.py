@@ -9,8 +9,9 @@ import io
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
+import stat
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 from urllib.parse import urlparse, parse_qs, unquote
@@ -78,6 +79,94 @@ class HermesAuthTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.conn.connect(email='dest@example.test')
         self.assertEqual(self.conn.status()['connections'],[])
+
+    def connected_plan_inputs(self, status='connected', email='dest@example.test'):
+        self.service.save('gmail-connections', 'gmail-abc', {
+            'connection_id': 'gmail-abc', 'status': status, 'email': email,
+            'verified_at': '2026-11-02T00:00:00Z', 'auth_provider': 'google',
+        })
+        source = self.root / 'export'
+        inbox = source / 'Inbox'
+        inbox.mkdir(parents=True)
+        (inbox / 'message.eml').write_bytes(
+            b'From: sender@example.test\r\nTo: old@example.test\r\n'
+            b'Message-ID: <fixture@example.test>\r\nSubject: Fixture\r\n\r\nBody\r\n'
+        )
+        return dict(gmail_connection='gmail-abc', source=str(source), source_mailbox='Old@Example.Test')
+
+    def test_connected_plan_profile(self):
+        inputs = self.connected_plan_inputs()
+        path = Path(self.conn.plan_profile('gmail-abc', inputs['source'], inputs['source_mailbox']))
+        self.assertEqual(path.parent.parent, self.service.root / 'gmail-plans')
+        self.assertEqual(path.name, 'profile.json')
+        profile = core.load_profile(path)
+        self.assertEqual(profile.destination, 'dest@example.test')
+        self.assertEqual(profile.source_mailbox, 'old@example.test')
+        self.assertEqual(profile.token_store_type, 'hermes')
+        for item, mode in ((path.parent.parent, 0o700), (path.parent, 0o700), (path, 0o600)):
+            self.assertEqual(stat.S_IMODE(item.stat().st_mode), mode)
+
+    def test_connected_plan_profile_rejects_invalid_inputs_before_creating_directories(self):
+        inputs = self.connected_plan_inputs(status='pending')
+        plans = self.service.root / 'gmail-plans'
+        with self.assertRaisesRegex(ValueError, 'Verify the Hermes Google account first'):
+            self.conn.plan_profile('gmail-abc', inputs['source'], inputs['source_mailbox'])
+        self.assertFalse(plans.exists())
+        binding = self.conn.record('gmail-abc')
+        self.service.save('gmail-connections', 'gmail-abc', binding | {'status': 'connected'})
+        for source in ('relative', str(self.root / 'missing')):
+            with self.subTest(source=source):
+                with self.assertRaisesRegex(ValueError, 'Source must be an existing absolute EML directory'):
+                    self.conn.plan_profile('gmail-abc', source, inputs['source_mailbox'])
+                self.assertFalse(plans.exists())
+        with self.assertRaisesRegex(core.MigrationError, 'Profile source_mailbox is not a valid mailbox address'):
+            self.conn.plan_profile('gmail-abc', inputs['source'], 'not an email')
+        self.assertFalse(plans.exists())
+
+    def test_connected_plan_removes_profile_when_profile_validation_fails(self):
+        inputs = self.connected_plan_inputs(email='not an email')
+        with self.assertRaisesRegex(core.MigrationError, 'Profile destination is not a valid mailbox address'):
+            self.conn.plan_profile('gmail-abc', inputs['source'], inputs['source_mailbox'])
+        self.assertEqual(list((self.service.root / 'gmail-plans').iterdir()), [])
+
+    def test_connected_plan_removes_profile_when_profile_write_fails(self):
+        inputs = self.connected_plan_inputs()
+        error = OSError('write interrupted')
+        with mock.patch.object(core, 'write_json_atomic', side_effect=error):
+            with self.assertRaises(OSError) as raised:
+                self.conn.plan_profile('gmail-abc', inputs['source'], inputs['source_mailbox'])
+        self.assertIs(raised.exception, error)
+        self.assertEqual(list((self.service.root / 'gmail-plans').iterdir()), [])
+
+    def test_connected_plan_conflict_preserves_existing_and_caller_profiles(self):
+        inputs = self.connected_plan_inputs()
+        caller_profile = self.profile().path
+        plans = self.service.root / 'gmail-plans'
+        with mock.patch.object(Service, 'launch', side_effect=lambda tid, operation: {'job_id': tid}) as launch:
+            result = self.service.plan(mode='gmail', **inputs)
+            directory, = plans.iterdir()
+            with self.assertRaisesRegex(ValueError, 'already owns this Gmail destination'):
+                self.service.plan(mode='gmail', **inputs)
+            with self.assertRaisesRegex(ValueError, 'already owns this Gmail destination'):
+                self.service.plan(mode='gmail', profile=str(caller_profile))
+        launch.assert_called_once_with(result['job_id'], 'prepare')
+        task = self.service.store.task(result['job_id'])
+        profile = directory / 'profile.json'
+        self.assertEqual(task['config']['profile'], str(profile))
+        self.assertTrue(profile.is_file())
+        self.assertEqual(list(plans.iterdir()), [directory])
+        self.assertTrue(caller_profile.is_file())
+
+    def test_connected_plan_keeps_profile_when_task_event_fails_after_creation(self):
+        inputs = self.connected_plan_inputs()
+        error = OSError('event write failed')
+        with mock.patch.object(self.service.store, 'event', side_effect=error), mock.patch.object(Service, 'launch') as launch:
+            with self.assertRaises(OSError) as raised:
+                self.service.plan(mode='gmail', **inputs)
+        self.assertIs(raised.exception, error)
+        launch.assert_not_called()
+        task, = self.service.store.tasks()
+        self.assertTrue(Path(task['config']['profile']).is_file())
 
     def test_profiles_refuse_legacy_credential_files_before_reading_them(self):
         profile=self.profile()
