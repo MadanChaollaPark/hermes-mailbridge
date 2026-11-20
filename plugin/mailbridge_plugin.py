@@ -9,6 +9,16 @@ import sys
 from bridge_plugin.service import Service
 
 
+def public_error(exc) -> str:
+    import gmail_eml_migration_v2 as core
+
+    if type(exc) is ValueError or type(exc) is core.MigrationError:
+        return str(exc)
+    if type(exc) is KeyError and exc.args == ("Migration not found",):
+        return "Migration not found"
+    return "Inspect local configuration or job evidence; no automatic retry was scheduled."
+
+
 def main():
     p = argparse.ArgumentParser(description="Mailbridge for Hermes")
     p.add_argument("--state", type=Path, default=Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "plugin-data/mailbridge")
@@ -63,8 +73,9 @@ def main():
             result = service.approve(args.job_id, destination, fingerprint)
         print(json.dumps({"ok": True, **result}, ensure_ascii=False))
     except Exception as exc:
-        # Fixed messages for controlled errors only; never echo provider responses.
-        message = str(exc) if type(exc) is ValueError else "Inspect local configuration or job evidence; no automatic retry was scheduled."
+        # Show Mailbridge-authored ValueError, core MigrationError, and the
+        # task-not-found KeyError. Redact everything else, including provider responses.
+        message = public_error(exc)
         print(json.dumps({"ok": False, "error_type": type(exc).__name__, "error": message}))
         return 1
 

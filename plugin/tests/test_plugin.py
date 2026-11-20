@@ -14,10 +14,13 @@ import threading
 import time
 import unittest
 from unittest import mock
+import gmail_eml_migration_v2 as core
+from bridge_plugin.gmail_transport import GmailHttpError
 from bridge_plugin.service import Service, catalog, exclusive
 from hermes_tools import SPECS, invoke
 from mailbridge.engine import digest
 from mailbridge.pop3_source import capture
+from mailbridge_plugin import public_error
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -111,6 +114,52 @@ class PluginTests(unittest.TestCase):
         self.assertNotIn('approve', SPECS)
         with self.assertRaises(ValueError):
             self.s.file('jobs', '/tmp/evil')
+
+    def test_public_error(self):
+        class DerivedMigrationError(core.MigrationError):
+            pass
+
+        self.assertEqual(public_error(ValueError('x')), 'x')
+        message = 'Profile schema_version must be 1.'
+        self.assertEqual(public_error(core.MigrationError(message)), message)
+        self.assertEqual(public_error(KeyError('Migration not found')), 'Migration not found')
+        generic = 'Inspect local configuration or job evidence; no automatic retry was scheduled.'
+        for exc in (
+            KeyError('other'),
+            RuntimeError('secret body'),
+            GmailHttpError(500, b'{"token":"secret body"}'),
+            json.JSONDecodeError('m', 'doc', 0),
+            DerivedMigrationError('secret body'),
+        ):
+            with self.subTest(error_type=type(exc).__name__):
+                self.assertEqual(public_error(exc), generic)
+
+    def test_call_reports_missing_migration(self):
+        result = subprocess.run([
+            sys.executable, str(ROOT / 'mailbridge_plugin.py'),
+            '--state', str(self.s.root), 'call',
+        ], input=json.dumps({'action': 'verify', 'arguments': {'tid': 'nosuchtask1'}}),
+            text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads(result.stdout), {
+            'ok': False, 'error_type': 'KeyError', 'error': 'Migration not found',
+        })
+
+    def test_call_reports_bad_gmail_profile(self):
+        profile = self.root / 'profile.json'
+        profile.touch(mode=0o600)
+        profile.write_text(json.dumps({'schema_version': 999}))
+        result = subprocess.run([
+            sys.executable, str(ROOT / 'mailbridge_plugin.py'),
+            '--state', str(self.s.root), 'call',
+        ], input=json.dumps({'action': 'plan', 'arguments': {
+            'mode': 'gmail', 'profile': str(profile),
+        }}), text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads(result.stdout), {
+            'ok': False, 'error_type': 'MigrationError',
+            'error': 'Profile schema_version must be 1.',
+        })
 
     def test_source_config_does_not_persist_secret(self):
         result = self.s.add_source('cafe24', 'test', 'mail.example.test', 'person@example.test', 'MAILBRIDGE_POP_PASSWORD')
