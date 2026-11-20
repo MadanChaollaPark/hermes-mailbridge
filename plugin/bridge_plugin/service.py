@@ -127,7 +127,8 @@ class Service:
         if operation not in {"prepare", "run", "verify", "reconcile", "capture"}:
             raise ValueError("Unsupported operation")
         with exclusive(self.root / "locks" / (tid + ".launch")):
-            if operation != "capture" and self.store.task(tid)["status"] == "abandoned":
+            task = self.store.task(tid) if operation != "capture" else None
+            if task is not None and task["status"] == "abandoned":
                 raise ValueError("Task was abandoned; create a new plan")
             # Parent acquires before spawn; child inherits this exact lock descriptor.
             path = self.root / "locks" / (tid + ".worker")
@@ -136,11 +137,11 @@ class Service:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 job = {"id": tid, "operation": operation, "status": "queued",
                        "started_at": now(), "payload": payload or {}}
-                # Prevent model/provider credentials unrelated to this job being inherited.
                 env = {k: v for k, v in os.environ.items() if k in {
                     "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "SSL_CERT_FILE",
                     "SSL_CERT_DIR", "SYSTEMROOT", "HERMES_HOME", "PYTHONPATH"}}
-                if operation != "capture":
+                # Only Gmail tasks receive the Google OAuth client configuration.
+                if task is not None and task["kind"] == "gmail":
                     for key in ("MAILBRIDGE_GOOGLE_CLIENT_ID", "MAILBRIDGE_GOOGLE_CLIENT_SECRET"):
                         if secret(key):
                             env[key] = secret(key)

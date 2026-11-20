@@ -280,6 +280,49 @@ class PluginTests(unittest.TestCase):
         path.write_text(json.dumps(profile))
         return path, profile
 
+    def test_worker_env_has_google_client_only_for_gmail_tasks(self):
+        profile, config = self.gmail_profile()
+        google = {key: 'fictional-' + key for key in (
+            'MAILBRIDGE_GOOGLE_CLIENT_ID', 'MAILBRIDGE_GOOGLE_CLIENT_SECRET')}
+        with mock.patch('bridge_plugin.service.secret', side_effect=google.get), \
+             mock.patch('bridge_plugin.service.subprocess.Popen', new_callable=mock.MagicMock) as popen:
+            self.s.plan(scenario='recovery')
+            popen.assert_called_once()
+            self.assertTrue(google.keys().isdisjoint(popen.call_args.kwargs['env']))
+
+            popen.reset_mock()
+            self.s.plan(mode='local', source=config['source_root'])
+            popen.assert_called_once()
+            self.assertTrue(google.keys().isdisjoint(popen.call_args.kwargs['env']))
+
+            popen.reset_mock()
+            self.s.plan(mode='gmail', profile=str(profile))
+            popen.assert_called_once()
+            env = popen.call_args.kwargs['env']
+            self.assertEqual({key: env[key] for key in google}, google)
+
+    def test_tool_shim_forwards_google_client_only_for_gmail_plan(self):
+        google = {key: 'fictional-' + key for key in (
+            'MAILBRIDGE_GOOGLE_CLIENT_ID', 'MAILBRIDGE_GOOGLE_CLIENT_SECRET')}
+        result = subprocess.CompletedProcess(args=[], returncode=0, stdout='{"ok": true}', stderr='')
+        with mock.patch('agent.secret_scope.get_secret', side_effect=google.get), \
+             mock.patch('hermes_tools.subprocess.run', return_value=result) as run:
+            for action, args, forwards_google in (
+                ('plan', {}, False),
+                ('plan', {'mode': 'demo'}, False),
+                ('plan', {'mode': 'local', 'source': '/x/eml'}, False),
+                ('plan', {'mode': 'gmail', 'profile': '/x/p.json'}, True),
+                ('gmail_connect', {}, True),
+                ('capture', {'connection_id': 'c1'}, False),
+            ):
+                with self.subTest(action=action, args=args):
+                    run.reset_mock()
+                    self.assertTrue(json.loads(invoke(action, args, self.s.root))['ok'])
+                    run.assert_called_once()
+                    env = run.call_args.kwargs['env']
+                    self.assertEqual({key: env[key] for key in google if key in env},
+                                     google if forwards_google else {})
+
     def test_gmail_prepare_needs_no_network_and_refuses_unapproved_start(self):
         path, profile = self.gmail_profile()
         tid = self.s.plan(mode='gmail', profile=str(path))['job_id']
