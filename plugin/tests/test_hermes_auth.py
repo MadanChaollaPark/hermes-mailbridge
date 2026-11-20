@@ -19,7 +19,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 import httpx
 
 import gmail_eml_migration_v2 as core
-from bridge_plugin import gmail_transport as transport
+from bridge_plugin import gmail_connection, gmail_transport as transport
 from bridge_plugin.gmail_connection import GmailConnections
 from bridge_plugin.service import Service, public_error, secret
 import hermes_tools
@@ -64,6 +64,55 @@ class HermesAuthTests(unittest.TestCase):
         self.assertEqual(result['sign_in_command'],'hermes auth add mailbridge:google')
         self.assertEqual(self.conn.status()['connections'],[])
         self.assertNotIn('fictional-client-secret',json.dumps(result))
+
+    def test_connect_returns_redacted_http_errors_without_binding(self):
+        body = b'{"error":{"message":"SECRET-DETAIL accessNotConfigured"}}'
+        for code, status in ((403, 'access_denied'), (429, 'temporarily_unavailable'),
+                             (503, 'temporarily_unavailable')):
+            with self.subTest(code=code):
+                error = transport.GmailHttpError(code, body)
+                with mock.patch.object(transport, 'host_request', side_effect=error):
+                    result = self.conn.connect()
+                self.assertEqual(result['status'], status)
+                self.assertEqual(result['http_status'], code)
+                self.assertFalse(result['migration_started'])
+                serialized = json.dumps(result)
+                self.assertNotIn('SECRET-DETAIL', serialized)
+                self.assertNotIn('fictional-client-secret', serialized)
+                self.assertEqual(self.conn.status()['connections'], [])
+                if code == 403:
+                    self.assertEqual(result['sign_in_command'], gmail_connection.AUTH_COMMAND)
+
+    def test_connect_returns_redacted_network_errors_without_binding(self):
+        for error in (httpx.ConnectError('SECRET-DETAIL'), TimeoutError('SECRET-DETAIL')):
+            with self.subTest(error_type=type(error).__name__):
+                with mock.patch.object(transport, 'host_request', side_effect=error):
+                    result = self.conn.connect()
+                self.assertEqual(result['status'], 'network_error')
+                self.assertFalse(result['migration_started'])
+                self.assertNotIn('SECRET-DETAIL', json.dumps(result))
+                self.assertEqual(self.conn.status()['connections'], [])
+
+    def test_connect_reraises_unhandled_http_error(self):
+        with mock.patch.object(transport, 'host_request', side_effect=transport.GmailHttpError(404)):
+            with self.assertRaises(transport.GmailHttpError) as raised:
+                self.conn.connect()
+        self.assertEqual(
+            public_error(raised.exception),
+            'Inspect local configuration or job evidence; no automatic retry was scheduled.',
+        )
+        self.assertEqual(self.conn.status()['connections'], [])
+
+    def test_connect_timeout_preserves_transport_default(self):
+        with mock.patch.object(transport, 'host_request',
+                               return_value=response({'emailAddress': 'dest@example.test'})) as host:
+            self.conn.connect()
+        self.assertEqual(host.call_args.kwargs['timeout'], gmail_connection.CONNECT_TIMEOUT)
+        self.assertLess(gmail_connection.CONNECT_TIMEOUT, 20)
+
+        with mock.patch.object(transport, 'host_request', return_value=response({'labels': []})) as host:
+            transport.GmailService().labels().list(userId='me').execute()
+        self.assertEqual(host.call_args.kwargs['timeout'], 120)
 
     def test_account_choice_is_verified_and_no_token_is_saved(self):
         with mock.patch.object(transport,'host_request',return_value=response({'emailAddress':'dest@example.test'})):
