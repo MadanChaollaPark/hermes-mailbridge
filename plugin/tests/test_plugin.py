@@ -438,6 +438,36 @@ class PluginTests(unittest.TestCase):
         self.assertNotEqual(new_tid, tid)
         self.assertEqual(wait(self.s, new_tid)['migration']['status'], 'awaiting_approval')
 
+    def test_destination_conflict_names_blocking_job(self):
+        path, _ = self.gmail_profile()
+        tid = self.s.plan(mode='gmail', profile=str(path))['job_id']
+        self.assertEqual(wait(self.s, tid)['migration']['status'], 'awaiting_approval')
+        with self.assertRaisesRegex(ValueError, 'already owns this Gmail destination') as error:
+            self.s.plan(mode='gmail', profile=str(path))
+        self.assertIn(tid, str(error.exception))
+        self.assertIn('awaiting_approval', str(error.exception))
+
+    def test_status_shows_abandon_command_for_stuck_gmail_task(self):
+        path, _ = self.gmail_profile()
+        tid = self.s.plan(mode='gmail', profile=str(path))['job_id']
+        self.assertEqual(wait(self.s, tid)['migration']['status'], 'awaiting_approval')
+        self.assertEqual(self.s.status(tid)['abandon_command'], [
+            sys.executable, str(ROOT / 'mailbridge_plugin.py'),
+            '--state', str(self.s.root), 'abandon', tid,
+        ])
+        with exclusive(self.s.root / 'locks' / (tid + '.worker')):
+            self.assertNotIn('abandon_command', self.s.status(tid))
+        self.s.abandon(tid)
+        self.assertNotIn('abandon_command', self.s.status(tid))
+        self.assertNotIn('abandon_command', self.s.status(self.prepare()))
+
+        finished = self.s.plan(mode='gmail', profile=str(path))['job_id']
+        self.assertEqual(wait(self.s, finished)['migration']['status'], 'awaiting_approval')
+        for status in ('complete', 'complete_with_exceptions'):
+            with self.subTest(status=status):
+                self.s.store.update_task(finished, status=status)
+                self.assertNotIn('abandon_command', self.s.status(finished))
+
     def test_abandoned_task_cannot_be_relaunched(self):
         tid = self.prepare()
         self.s.abandon(tid)

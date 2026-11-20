@@ -345,6 +345,9 @@ class Service:
                 result["engine_logs"] = [] if logs.is_symlink() else sorted(
                     str(path) for path in logs.glob(f"{tid}.*.log")
                     if not path.is_symlink() and path.is_file())
+                if not active and task["status"] not in {"complete", "complete_with_exceptions", "abandoned"}:
+                    result["abandon_command"] = [sys.executable, str(PACKAGE / "mailbridge_plugin.py"),
+                        "--state", str(self.root), "abandon", tid]
             if task["prepared"] and task["kind"] == "gmail":
                 result["destination"] = task["config"]["destination"]
                 result["approval_command"] = [sys.executable, str(PACKAGE / "mailbridge_plugin.py"),
