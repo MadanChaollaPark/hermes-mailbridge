@@ -91,7 +91,7 @@ class Service:
         atomic(p, json.dumps(value, indent=2, ensure_ascii=False).encode())
 
     def add_source(self, provider, connection_id, host, username, password_env="MAILBRIDGE_POP_PASSWORD",
-                   security="tls", port=995):
+                   security="tls", port=None):
         p = catalog(provider)
         valid_id(connection_id)
         if p["capture_policy"] == "export_only":
@@ -100,7 +100,11 @@ class Service:
             raise ValueError("Supply the exact provider hostname, without scheme, port or path")
         if not username or any(c in username for c in "\r\n\x00"):
             raise ValueError("Invalid username")
-        if security not in {"tls", "starttls"} or type(port) is not int or not 1 <= port <= 65535:
+        if security not in {"tls", "starttls"}:
+            raise ValueError("TLS or STARTTLS and a valid port are required")
+        if port is None:
+            port = 995 if security == "tls" else 110
+        if type(port) is not int or not 1 <= port <= 65535:
             raise ValueError("TLS or STARTTLS and a valid port are required")
         if password_env != "MAILBRIDGE_POP_PASSWORD":
             raise ValueError("Use the declared MAILBRIDGE_POP_PASSWORD secret in the active Hermes profile")

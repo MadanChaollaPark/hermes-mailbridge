@@ -38,7 +38,7 @@ def main():
         source.add_argument("--" + name, required=True)
     source.add_argument("--password-env", default="MAILBRIDGE_POP_PASSWORD", choices=["MAILBRIDGE_POP_PASSWORD"])
     source.add_argument("--security", choices=["tls", "starttls"], default="tls")
-    source.add_argument("--port", type=int, default=995)
+    source.add_argument("--port", type=int, default=None, help="Defaults to 995 for tls, 110 for starttls")
     sub.add_parser("providers", help="Print the provider catalog")
     args = p.parse_args()
     service = Service(args.state)

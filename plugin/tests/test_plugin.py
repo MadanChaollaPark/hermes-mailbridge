@@ -174,6 +174,38 @@ class PluginTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.s.add_source('cafe24', 'unsafe', 'mail.example.test', 'user', 'MAILBRIDGE_POP_PASSWORD', security='plain')
 
+    def test_source_port_defaults_follow_security(self):
+        self.s.add_source('cafe24', 'tlsdef', 'mail.example.test', 'u', 'MAILBRIDGE_POP_PASSWORD')
+        tls = json.loads(self.s.file('connections', 'tlsdef').read_text())
+        self.assertEqual(tls['port'], 995)
+        self.assertEqual(tls['security'], 'tls')
+
+        self.s.add_source('cafe24', 'stlsdef', 'mail.example.test', 'u',
+                          'MAILBRIDGE_POP_PASSWORD', security='starttls')
+        starttls = json.loads(self.s.file('connections', 'stlsdef').read_text())
+        self.assertEqual(starttls['port'], 110)
+
+        self.s.add_source('cafe24', 'stlsexp', 'mail.example.test', 'u',
+                          'MAILBRIDGE_POP_PASSWORD', security='starttls', port=2110)
+        explicit = json.loads(self.s.file('connections', 'stlsexp').read_text())
+        self.assertEqual(explicit['port'], 2110)
+
+        for port in (0, '995'):
+            with self.subTest(port=port), self.assertRaises(ValueError):
+                self.s.add_source('cafe24', 'invalid', 'mail.example.test', 'u',
+                                  'MAILBRIDGE_POP_PASSWORD', port=port)
+
+    def test_source_add_cli_starttls_defaults_to_110(self):
+        result = subprocess.run([
+            sys.executable, str(ROOT / 'mailbridge_plugin.py'),
+            '--state', str(self.s.root), 'source-add',
+            '--provider', 'cafe24', '--connection-id', 'clistls',
+            '--host', 'mail.example.test', '--username', 'u', '--security', 'starttls',
+        ], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(result.returncode, 0, result.stdout or result.stderr)
+        connection = json.loads(self.s.file('connections', 'clistls').read_text())
+        self.assertEqual(connection['port'], 110)
+
     def test_approval_requires_terminal_and_exact_binding(self):
         tid = self.prepare()
         outcome = subprocess.run([sys.executable, str(ROOT / 'mailbridge_plugin.py'), '--state', str(self.s.root), 'approve', tid], input='', text=True, capture_output=True)
