@@ -40,7 +40,19 @@ class Request:
 
     def execute(self, num_retries=0):
         # Never retry writes here. The migration ledger reconciles ambiguous outcomes.
-        response = host_request('google', self.method, self.url, json=self.body, timeout=120)
+        httpx = None
+        if self.method == 'GET':
+            try:
+                import httpx
+            except ImportError:
+                httpx = None
+        if httpx is not None:
+            try:
+                response = host_request('google', self.method, self.url, json=self.body, timeout=120)
+            except httpx.TransportError as exc:
+                raise ConnectionError(f'Gmail transport error ({type(exc).__name__}) on read request') from None
+        else:
+            response = host_request('google', self.method, self.url, json=self.body, timeout=120)
         if not 200 <= response.status < 300:
             raise GmailHttpError(response.status, response.body)
         result = response.json()

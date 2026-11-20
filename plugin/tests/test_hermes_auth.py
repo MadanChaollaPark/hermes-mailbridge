@@ -15,6 +15,8 @@ import unittest
 from unittest import mock
 from urllib.parse import urlparse, parse_qs, unquote
 
+import httpx
+
 import gmail_eml_migration_v2 as core
 from bridge_plugin import gmail_transport as transport
 from bridge_plugin.gmail_connection import GmailConnections
@@ -105,6 +107,40 @@ class HermesAuthTests(unittest.TestCase):
         self.assertNotIn('UNRELATED_API_KEY',env)
         self.assertEqual(env['HERMES_HOME'],str(self.root/'profile'))
         with self.assertRaises(ValueError): secret('UNRELATED_API_KEY')
+
+    def test_read_transport_error_is_retried_by_engine(self):
+        labels = response({'labels': [{'id': 'INBOX', 'name': 'INBOX'}]})
+        with mock.patch.object(transport, 'host_request', side_effect=[httpx.ConnectError('boom'), labels]) as host, \
+                mock.patch.object(core.time, 'sleep'):
+            result = core.list_gmail_labels(transport.GmailService('dest@example.test'))
+        self.assertEqual(result, {'INBOX': 'INBOX'})
+        self.assertEqual(host.call_count, 2)
+
+    def test_read_transport_error_is_bounded(self):
+        with mock.patch.object(transport, 'host_request', side_effect=httpx.ReadTimeout('slow')) as host, \
+                mock.patch.object(core.time, 'sleep'):
+            with self.assertRaises(core.MigrationError):
+                core.list_gmail_labels(transport.GmailService('dest@example.test'))
+        self.assertEqual(host.call_count, 5)
+
+    def test_get_wrapper_does_not_leak_message(self):
+        request = transport.GmailService('dest@example.test').labels().list(userId='me')
+        with mock.patch.object(transport, 'host_request', side_effect=httpx.ConnectError('secret-ish detail')):
+            with self.assertRaises(ConnectionError) as raised:
+                request.execute()
+        self.assertNotIn('secret-ish detail', str(raised.exception))
+
+    def test_write_transport_error_is_not_retried_or_rewrapped(self):
+        media = transport.Media(io.BytesIO(b'From: a@example.test\r\n\r\nbody'), 'message/rfc822')
+        request = transport.GmailService('dest@example.test').messages().import_(userId='me',
+            body={'labelIds': ['INBOX']}, media_body=media, internalDateSource='dateHeader',
+            neverMarkSpam=True, processForCalendar=False, deleted=False, fields='id')
+        error = httpx.ConnectError('lost')
+        with mock.patch.object(transport, 'host_request', side_effect=error) as host:
+            with self.assertRaises(httpx.ConnectError) as raised:
+                request.execute()
+        self.assertIs(raised.exception, error)
+        self.assertEqual(host.call_count, 1)
 
     def test_utf8_import_is_exact_json_with_no_write_retries(self):
         raw=b'From: a@example.test\r\n\r\n'+ '안녕하세요'.encode()
