@@ -313,6 +313,11 @@ class Service:
             result["verification_scope"] = task["config"].get("gmail_report", {}).get(
                 "verification_scope", "Exact EML bytes and folder mappings in local rehearsal" if task["kind"] != "gmail"
                 else "Gmail IDs, selected headers, dates and labels; not universal byte equality")
+            if task["kind"] == "gmail":
+                logs = self.root / "logs"
+                result["engine_logs"] = [] if logs.is_symlink() else sorted(
+                    str(path) for path in logs.glob(f"{tid}.*.log")
+                    if not path.is_symlink() and path.is_file())
             if task["prepared"] and task["kind"] == "gmail":
                 result["destination"] = task["config"]["destination"]
                 result["approval_command"] = [sys.executable, str(PACKAGE / "mailbridge_plugin.py"),

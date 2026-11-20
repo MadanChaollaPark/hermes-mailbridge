@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import socketserver
 import ssl
+import stat
 import subprocess
 import sys
 import tempfile
@@ -210,6 +211,62 @@ class PluginTests(unittest.TestCase):
         path.write_text(json.dumps(profile))
         with self.assertRaisesRegex(ValueError, 'profile changed'):
             self.s.plan_digest(tid)
+
+    def test_gmail_prepare_writes_private_engine_log(self):
+        profile, _ = self.gmail_profile()
+        tid = self.s.plan(mode='gmail', profile=str(profile))['job_id']
+        result = wait(self.s, tid)
+        self.assertEqual(result['migration']['status'], 'awaiting_approval')
+        logs = self.s.root / 'logs'
+        path = logs / f'{tid}.prepare.log'
+        self.assertTrue(path.is_file())
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertIn('prepare: PASS', path.read_text())
+        self.assertEqual(stat.S_IMODE(logs.stat().st_mode), 0o700)
+        self.assertEqual(result['engine_logs'], [str(path)])
+
+    def test_gmail_core_subprocess_has_no_timeout(self):
+        profile, _ = self.gmail_profile()
+        tid = self.s.plan(mode='gmail', profile=str(profile))['job_id']
+        self.assertEqual(wait(self.s, tid)['migration']['status'], 'awaiting_approval')
+        path = self.s.root / 'logs' / f'{tid}.run.log'
+        path.write_text('previous output\n')
+        path.chmod(0o644)
+
+        def stopped_engine(argv, *, stdin, stdout, stderr):
+            os.write(stdout, b'engine stdout\n')
+            os.write(stderr, b'engine stderr\n')
+            return subprocess.CompletedProcess(args=argv, returncode=1)
+
+        with mock.patch('mailbridge.engine.subprocess.run', side_effect=stopped_engine) as run:
+            self.s.engine.run_gmail(tid)
+
+        run.assert_called_once()
+        kwargs = run.call_args.kwargs
+        self.assertNotIn('timeout', kwargs)
+        self.assertNotIn('capture_output', kwargs)
+        self.assertEqual(kwargs['stdin'], subprocess.DEVNULL)
+        self.assertIsInstance(kwargs['stdout'], int)
+        self.assertIsInstance(kwargs['stderr'], int)
+        self.assertEqual(kwargs['stdout'], kwargs['stderr'])
+        result = self.s.status(tid)
+        self.assertEqual(result['migration']['status'], 'needs_review')
+        self.assertTrue(path.is_file())
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertEqual(result['engine_logs'], [str(path.with_name(f'{tid}.prepare.log')), str(path)])
+        previous, header, stdout, stderr = path.read_text().splitlines()
+        self.assertEqual(previous, 'previous output')
+        self.assertRegex(header, r'^== .+\+00:00 run$')
+        self.assertEqual(stdout, 'engine stdout')
+        self.assertEqual(stderr, 'engine stderr')
+
+    def test_engine_log_refuses_symlinked_log_dir(self):
+        target = self.root / 'other'
+        target.mkdir()
+        (self.s.root / 'logs').symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'State must not be a symlink'):
+            self.s.engine._core_log('task', 'prepare')
+        self.assertEqual(list(target.iterdir()), [])
 
     def test_abandon_frees_gmail_destination(self):
         path, _ = self.gmail_profile()

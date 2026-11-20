@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.policy import SMTP
 from pathlib import Path
@@ -341,6 +342,27 @@ class Engine:
         self.store.update_task(tid, final_verified=0)
         self.store.event(tid, "operator", "review", "Local-only exception acknowledged", f"{row['name']}: {reason.strip()}. This row remains outside destination coverage.")
 
+    def _core_log(self, tid, operation) -> Path:
+        directory = self.store.root / "logs"
+        if directory.is_symlink():
+            raise ValueError("State must not be a symlink")
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        return directory / f"{tid}.{operation}.log"
+
+    def _run_core(self, path, operation, argv):
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW,
+                         0o600, dir_fd=directory_fd)
+            try:
+                os.fchmod(fd, 0o600)
+                os.write(fd, f"== {datetime.now(timezone.utc).isoformat()} {operation}\n".encode())
+                return subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=fd, stderr=fd)
+            finally:
+                os.close(fd)
+        finally:
+            os.close(directory_fd)
+
     def gmail_inventory(self, tid, parent=None):
         import gmail_eml_migration_v2 as core
         task = self.store.task(tid)
@@ -349,9 +371,11 @@ class Engine:
             raise ValueError("Gmail profile changed after task creation")
         if not profile.manifest_path.exists():
             # A subprocess keeps stdout handling independent of server request threads.
-            result = subprocess.run([sys.executable, str(Path(core.__file__)), "prepare", "--profile", str(profile.path)], capture_output=True, timeout=600)
+            path = self._core_log(tid, "prepare")
+            result = self._run_core(path, "prepare", [
+                sys.executable, str(Path(core.__file__)), "prepare", "--profile", str(profile.path)])
             if result.returncode:
-                raise ValueError("Original engine preparation failed; inspect the profile using the CLI")
+                raise ValueError(f"Original engine preparation failed; see {path}")
         manifest = core.load_manifest(profile)
         core.validate_source_snapshot(profile, manifest)
         rows = [{"id": r["item_key"], "name": r["relative_path"], "folder": r["source_folder"],
@@ -370,9 +394,10 @@ class Engine:
             raise ValueError("Profile changed; create a newly reviewed migration")
         self.store.event(tid, "worker", "job", "Original Gmail engine owns this mailbox", "One writer per mailbox; original OAuth binding, uncertain-outcome reconciliation, MIME repairs, and final readback are retained.", parent)
         # Never launch OAuth consent automatically or transform a rejection here.
-        result = subprocess.run([sys.executable, str(Path(core.__file__)), "run", "--profile", str(profile.path),
-                                 "--confirm-destination", profile.destination, "--confirm-source-count", str(task["total"])],
-                                capture_output=True, timeout=3600)
+        path = self._core_log(tid, "run")
+        result = self._run_core(path, "run", [
+            sys.executable, str(Path(core.__file__)), "run", "--profile", str(profile.path),
+            "--confirm-destination", profile.destination, "--confirm-source-count", str(task["total"])])
         manifest = core.load_manifest(profile)
         checkpoint = core.load_checkpoint(profile, manifest, create=False) if profile.checkpoint_path.exists() else None
         report = core.build_report(profile, manifest, checkpoint)
@@ -390,4 +415,4 @@ class Engine:
         config = self.store.task(tid)["config"]
         config["gmail_report"] = {k: report[k] for k in ("accounted_complete", "gmail_complete", "folder_label_complete", "final_reconciliation_verified", "verification_scope")}
         self.store.update_task(tid, config=config)
-        self.store.event(tid, "verifier", "report", "Original Gmail engine returned", f"Exit {result.returncode}. Accounted: {report['accounted_complete']}; Gmail complete: {report['gmail_complete']}. Readback scope is IDs, selected headers, dates and labels—not universal raw-byte equivalence.", parent)
+        self.store.event(tid, "verifier", "report", "Original Gmail engine returned", f"Exit {result.returncode}. Accounted: {report['accounted_complete']}; Gmail complete: {report['gmail_complete']}. Readback scope is IDs, selected headers, dates and labels—not universal raw-byte equivalence. Engine log: {path}.", parent)
