@@ -74,6 +74,8 @@ Review the frozen count, destination and scope. Run the exact `approval_command`
 
 The operator approval is a workflow guardrail, not an OS sandbox against arbitrary file/terminal access. The bundled skill instructs the agent not to forge or execute approval. Revoking permission prevents future starts; it cannot undo an in-flight import.
 
+Close a failed or unwanted plan locally with `python3 mailbridge_plugin.py --state <state> abandon <job_id>` once its worker has stopped and any uncertain writes have been reconciled. Abandoning removes the approval, preserves imported mail, and frees the destination for a new plan.
+
 Workers survive tool calls and agent restarts. Locks serialize each task, source and destination within one Hermes profile, plus the engine's checkpoint lock. Do not run another profile or external importer against the same destination concurrently. Resume the same job after interruption. Ambiguous uploads are reconciled using Gmail evidence, never blindly retried.
 
 The Hermes adapter uses base64url JSON imports and limits each prepared message to **25 MiB**. Larger messages stop before upload and remain unchanged locally. This conservative transport limit is lower than Gmail's overall API limit; streaming/resumable media upload is not implemented here. UTF-8 bytes are preserved in the encoded request. Mail is imported, not sent to recipients; calendar extraction is disabled.

@@ -185,7 +185,7 @@ class PluginTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             install(ROOT, home)
 
-    def test_gmail_prepare_needs_no_network_and_refuses_unapproved_start(self):
+    def gmail_profile(self):
         demo = self.prepare('clean')
         source = self.s.store.task(demo)['config']['source_root']
         profile = json.loads((ROOT / 'examples/profile.example.json').read_text())
@@ -194,6 +194,10 @@ class PluginTests(unittest.TestCase):
             token_store={'type': 'hermes'})
         path = self.root / 'profile.json'
         path.write_text(json.dumps(profile))
+        return path, profile
+
+    def test_gmail_prepare_needs_no_network_and_refuses_unapproved_start(self):
+        path, profile = self.gmail_profile()
         tid = self.s.plan(mode='gmail', profile=str(path))['job_id']
         result = wait(self.s, tid)
         self.assertEqual(result['status'], 'complete', result)
@@ -206,6 +210,65 @@ class PluginTests(unittest.TestCase):
         path.write_text(json.dumps(profile))
         with self.assertRaisesRegex(ValueError, 'profile changed'):
             self.s.plan_digest(tid)
+
+    def test_abandon_frees_gmail_destination(self):
+        path, _ = self.gmail_profile()
+        tid = self.s.plan(mode='gmail', profile=str(path))['job_id']
+        self.assertEqual(wait(self.s, tid)['migration']['status'], 'awaiting_approval')
+        with self.assertRaisesRegex(ValueError, 'already owns'):
+            self.s.plan(mode='gmail', profile=str(path))
+        self.s.save('grants', tid, {'scope': 'run_this_frozen_plan'})
+        self.s.store.update_task(tid, approved=1, final_verified=1)
+        self.assertEqual(self.s.abandon(tid), {
+            'job_id': tid, 'abandoned': True, 'previous_status': 'awaiting_approval',
+        })
+        task = self.s.store.task(tid)
+        self.assertEqual(task['status'], 'abandoned')
+        self.assertEqual(task['approved'], 0)
+        self.assertEqual(task['final_verified'], 0)
+        self.assertFalse(self.s.file('grants', tid).exists())
+        new_tid = self.s.plan(mode='gmail', profile=str(path))['job_id']
+        self.assertNotEqual(new_tid, tid)
+        self.assertEqual(wait(self.s, new_tid)['migration']['status'], 'awaiting_approval')
+
+    def test_abandoned_task_cannot_be_relaunched(self):
+        tid = self.prepare()
+        self.s.abandon(tid)
+        with self.assertRaisesRegex(ValueError, 'abandoned'):
+            self.s.start(tid)
+        for action in ('verify', 'reconcile'):
+            with self.assertRaisesRegex(ValueError, 'abandoned'):
+                self.s.dispatch(action, {'tid': tid})
+        with self.assertRaisesRegex(ValueError, 'already finished or abandoned'):
+            self.s.abandon(tid)
+
+    def test_abandon_refuses_active_worker_and_uncertain_rows(self):
+        tid = self.prepare()
+        with exclusive(self.s.root / 'locks' / (tid + '.worker')):
+            with self.assertRaisesRegex(ValueError, 'active worker'):
+                self.s.abandon(tid)
+        row = self.s.store.messages(tid)[0]
+        for status in ('uncertain', 'inflight'):
+            self.s.store.message(tid, row['id'], status=status)
+            with self.assertRaisesRegex(ValueError, 'Reconcile'):
+                self.s.abandon(tid)
+        self.s.store.message(tid, row['id'], status=row['status'])
+        self.s.store.update_task(tid, status='complete')
+        with self.assertRaisesRegex(ValueError, 'already finished or abandoned'):
+            self.s.abandon(tid)
+
+    def test_abandon_cli_is_operator_only(self):
+        tid = self.prepare()
+        result = subprocess.run([
+            sys.executable, str(ROOT / 'mailbridge_plugin.py'),
+            '--state', str(self.s.root), 'abandon', tid,
+        ], capture_output=True, text=True, stdin=subprocess.DEVNULL, check=True)
+        output = json.loads(result.stdout)
+        self.assertIs(output['ok'], True)
+        self.assertIs(output['abandoned'], True)
+        self.assertNotIn('abandon', SPECS)
+        with self.assertRaisesRegex(ValueError, 'Unknown action'):
+            self.s.dispatch('abandon', {'tid': tid})
 
     def test_loopback_tls_pop_capture_resume_then_rehearsal(self):
         cert, key = self.root / 'cert.pem', self.root / 'key.pem'

@@ -123,6 +123,8 @@ class Service:
         if operation not in {"prepare", "run", "verify", "reconcile", "capture"}:
             raise ValueError("Unsupported operation")
         with exclusive(self.root / "locks" / (tid + ".launch")):
+            if operation != "capture" and self.store.task(tid)["status"] == "abandoned":
+                raise ValueError("Task was abandoned; create a new plan")
             # Parent acquires before spawn; child inherits this exact lock descriptor.
             path = self.root / "locks" / (tid + ".worker")
             fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -244,6 +246,19 @@ class Service:
                                      "scope": "run_this_frozen_plan", "approved_at": now()})
         return {"job_id": tid, "authorized": True}
 
+    def abandon(self, tid):
+        valid_id(tid)
+        with exclusive(self.root / "locks" / (tid + ".launch")):
+            with exclusive(self.root / "locks" / (tid + ".worker")):
+                task = self.store.task(tid)
+                if task["status"] in {"complete", "complete_with_exceptions", "abandoned"}:
+                    raise ValueError("Task is already finished or abandoned")
+                if self.store.messages(tid, statuses=["uncertain", "inflight"]):
+                    raise ValueError("Reconcile uncertain writes before abandoning this task")
+                self.file("grants", tid).unlink(missing_ok=True)
+                self.store.update_task(tid, status="abandoned", approved=0, final_verified=0)
+        return {"job_id": tid, "abandoned": True, "previous_status": task["status"]}
+
     def authorized(self, tid, validate_source=True):
         task = self.store.task(tid)
         if task["kind"] != "gmail":
@@ -260,6 +275,8 @@ class Service:
 
     def start(self, tid):
         task = self.store.task(tid)
+        if task["status"] == "abandoned":
+            raise ValueError("Task was abandoned; create a new plan")
         if task["status"] in {"complete", "complete_with_exceptions"}:
             raise ValueError("Run is finished; request verification or create another plan")
         # Large source scans belong to the durable worker, not the short tool call.

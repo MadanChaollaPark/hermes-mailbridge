@@ -88,7 +88,7 @@ class Engine:
         import gmail_eml_migration_v2 as core
         profile = core.load_profile(Path(profile_path).expanduser().resolve())
         with self.lock:
-            if any(t["kind"] == "gmail" and t["config"]["destination"] == profile.destination and t["status"] not in {"complete", "complete_with_exceptions"} for t in self.store.tasks()):
+            if any(t["kind"] == "gmail" and t["config"]["destination"] == profile.destination and t["status"] not in {"complete", "complete_with_exceptions", "abandoned"} for t in self.store.tasks()):
                 raise ValueError("An active migration already owns this Gmail destination")
             return self.store.create(f"Cafe24 → {profile.destination}", "gmail",
                                      {"profile": str(profile.path), "destination": profile.destination, "source": "Cafe24 EML export", "source_root": str(profile.source_root), "profile_fingerprint": profile.profile_fingerprint, "synthetic": False})

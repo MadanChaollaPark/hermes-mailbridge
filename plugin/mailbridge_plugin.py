@@ -21,6 +21,8 @@ def main():
     approve.add_argument("job_id")
     revoke = sub.add_parser("revoke", help="Revoke permission for future runs; active imports finish")
     revoke.add_argument("job_id")
+    abandon = sub.add_parser("abandon", help="Abandon a stuck or unwanted plan so its destination can be planned again; does not delete imported mail")
+    abandon.add_argument("job_id")
     source = sub.add_parser("source-add", help="Register a source; credentials stay in environment")
     for name in ("provider", "connection-id", "host", "username"):
         source.add_argument("--" + name, required=True)
@@ -45,6 +47,8 @@ def main():
             grant = service.file("grants", args.job_id)
             grant.unlink(missing_ok=True)
             result = {"job_id": args.job_id, "revoked": True, "active_import_stopped": False}
+        elif args.command == "abandon":
+            result = service.abandon(args.job_id)
         else:
             if not sys.stdin.isatty():
                 raise ValueError("Approval requires an interactive local terminal")
