@@ -2,6 +2,7 @@
 import fcntl
 import json
 import os
+import poplib
 from pathlib import Path
 import socketserver
 import ssl
@@ -16,6 +17,7 @@ from unittest import mock
 from bridge_plugin.service import Service, catalog, exclusive
 from hermes_tools import SPECS, invoke
 from mailbridge.engine import digest
+from mailbridge.pop3_source import capture
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -389,6 +391,70 @@ class PluginTests(unittest.TestCase):
         self.assertTrue(all('test-secret-only' not in p.read_text() for p in self.s.root.rglob('*.json')))
         captured = list((self.s.root / 'captures/loopback/Inbox').glob('*.eml'))
         self.assertEqual({digest(p.read_bytes()) for p in captured}, {digest(m) for m in messages})
+
+    def test_pop_capture_accepts_long_lines(self):
+        previous_maxline = poplib._MAXLINE
+        cert, key = self.root / 'cert.pem', self.root / 'key.pem'
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+            '-keyout', str(key), '-out', str(cert), '-days', '1', '-subj', '/CN=localhost',
+            '-addext', 'subjectAltName=DNS:localhost'], check=True, capture_output=True)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        commands = []
+        messages = [
+            b'Subject: Long HTML\r\nContent-Type: text/html\r\n\r\n'
+            + b'<p>' + b'x' * 100000 + b'</p>\r\n',
+            b'Subject: Short message\r\n\r\nShort body\r\n',
+        ]
+        ctx = ssl.create_default_context(cafile=str(cert))
+
+        class Handler(socketserver.StreamRequestHandler):
+            def setup(self):
+                self.request = context.wrap_socket(self.request, server_side=True)
+                super().setup()
+
+            def finish(self):
+                try:
+                    super().finish()
+                finally:
+                    self.request.close()
+
+            def handle(self):
+                self.wfile.write(b'+OK test POP\r\n')
+                while line := self.rfile.readline():
+                    command, *arg = line.decode().strip().split()
+                    commands.append(command)
+                    if command in {'USER', 'PASS'}:
+                        self.wfile.write(b'+OK\r\n')
+                    elif command == 'UIDL':
+                        self.wfile.write(b'+OK\r\n1 uid-long\r\n2 uid-short\r\n.\r\n')
+                    elif command == 'RETR':
+                        self.wfile.write(b'+OK\r\n' + messages[int(arg[0])-1] + b'.\r\n')
+                    elif command == 'QUIT':
+                        self.wfile.write(b'+OK bye\r\n')
+                        return
+                    else:
+                        self.wfile.write(b'-ERR\r\n')
+
+        with socketserver.ThreadingTCPServer(('127.0.0.1', 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                result = capture(
+                    'localhost', 'fixture', 'test-secret-only', self.root / 'cap',
+                    security='tls', port=server.server_address[1],
+                    connect=lambda host, port: poplib.POP3_SSL(host, port, timeout=30, context=ctx),
+                )
+            finally:
+                server.shutdown()
+                thread.join()
+
+        self.assertEqual(result['downloaded_this_run'], 2)
+        captured = (self.root / 'cap' / 'Inbox').glob('*.eml')
+        self.assertCountEqual([digest(p.read_bytes()) for p in captured],
+                              [digest(message) for message in messages])
+        self.assertEqual(poplib._MAXLINE, previous_maxline)
+        self.assertNotIn('DELE', commands)
 
 
 if __name__ == '__main__':
